@@ -478,12 +478,12 @@ function Dashboard({clients,appts,expenses,setTab}) {
       )}
 
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,padding:'14px 16px'}}>
-        <div style={{textAlign:'center',background:'#EDF7F0',borderRadius:12,padding:'11px 6px',cursor:'pointer'}} onClick={()=>setTab('income-detail', isMonth?{month:selMonth}:{})}>
+        <div style={{textAlign:'center',background:'#EDF7F0',borderRadius:12,padding:'11px 6px',cursor:'pointer'}} onClick={()=>setTab('income-detail', isMonth?{month:selMonth,origin:'dashboard'}:{origin:'dashboard'})}>
           <div style={{fontSize:10,color:'var(--green)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:3}}>Recibido</div>
           <div style={{fontFamily:'Georgia,serif',fontSize:14,fontWeight:700,color:'var(--green)'}}>{fmtM(aRevDone)}</div>
           <div style={{fontSize:10,color:'var(--green)',marginTop:2}}>{aDone.length} citas</div>
         </div>
-        <div style={{textAlign:'center',background:'#FFF8E6',borderRadius:12,padding:'11px 6px',cursor:'pointer'}} onClick={()=>setTab('income-detail', isMonth?{filter:'pending',month:selMonth}:{filter:'pending'})}>
+        <div style={{textAlign:'center',background:'#FFF8E6',borderRadius:12,padding:'11px 6px',cursor:'pointer'}} onClick={()=>setTab('income-detail', isMonth?{filter:'pending',month:selMonth,origin:'dashboard'}:{filter:'pending',origin:'dashboard'})}>
           <div style={{fontSize:10,color:'var(--gold)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:3}}>Pendiente</div>
           <div style={{fontFamily:'Georgia,serif',fontSize:14,fontWeight:700,color:'var(--gold)'}}>{fmtM(aRevPend)}</div>
           <div style={{fontSize:10,color:'var(--gold)',marginTop:2}}>{aPend.length} {'\u2192'}</div>
@@ -1008,7 +1008,7 @@ function NewWizard({clients,services,appts,SA,SC,sync,infoModal,onClose}) {
       return
     }
     if (createM && nameValid(newName) && phoneValid(newPhone)) {
-      const nc = {id:uid(),name:capWords(newName),phone:newPhone.trim(),createdAt:todayStr()}
+      const nc = {id:uid(),name:newName.trim().toUpperCase(),phone:newPhone.trim(),createdAt:todayStr()}
       SC([...clients,nc]); setFc(nc)
     }
     setStep(3)
@@ -1254,7 +1254,7 @@ function ClientsTab({clients,appts,SC,confirm,infoModal,setTab}) {
     const dup   = safe.find(c=>(c.phone||'').replace(/\D/g,'')===clean)
     if (dup) { infoModal(`Ya existe "${dup.name}" con ese número. No se puede duplicar.`); return }
     if (!nameValid(name)||!phoneValid(phone)) return
-    SC([...safe,{id:uid(),name:capWords(name),phone:phone.trim(),createdAt:todayStr()}])
+    SC([...safe,{id:uid(),name:name.trim().toUpperCase(),phone:phone.trim(),createdAt:todayStr()}])
     setN(''); setP('')
   }
 
@@ -1262,7 +1262,7 @@ function ClientsTab({clients,appts,SC,confirm,infoModal,setTab}) {
     const clean = editData.phone?.replace(/\D/g,'')||''
     const dup   = safe.find(x=>x.id!==c.id&&(x.phone||'').replace(/\D/g,'')===clean)
     if (dup) { infoModal(`Ya existe "${dup.name}" con ese número.`); return }
-    SC(safe.map(x=>x.id===c.id?{...c,...editData,name:capWords(editData.name||c.name)}:x)); setEI(null)
+    SC(safe.map(x=>x.id===c.id?{...c,...editData,name:(editData.name||c.name).trim().toUpperCase()}:x)); setEI(null)
   }
 
   const filt = safe.filter(c=>String(c.name||'').toLowerCase().includes(srch.toLowerCase())||String(c.phone||'').includes(srch))
@@ -1390,7 +1390,7 @@ function FinancesTab({appts,expenses,SE,setTab,confirm}) {
 
   const add=()=>{
     if(!desc.trim()||!amount)return
-    SE([...safe,{id:uid(),description:capFirst(desc),amount:Number(amount),category:customCat||cat,date:expDate}])
+    SE([...safe,{id:uid(),description:capFirst(desc),amount:Number(amount),category:capFirst(customCat||cat),date:expDate}])
     setD('');setA('');setCC('')
   }
   const saveEdit=()=>{SE(safe.map(e=>e.id===editId?{...e,...editData}:e));setEI(null)}
@@ -1865,7 +1865,7 @@ function IncomeDetail({appts,setTab,tabExtra}) {
 
   return <>
     <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:18}}>
-      <button className="btn-sm" onClick={()=>setTab('finances')}>← Volver</button>
+      <button className="btn-sm" onClick={()=>setTab(tabExtra?.origin||'finances')}>← Volver</button>
       <span style={{fontFamily:'Georgia,serif',fontSize:20,fontWeight:600}}>💚 Detalle Ingresos</span>
     </div>
     <select className="inp" value={month} onChange={e=>setM(e.target.value)} style={{marginBottom:12}}>
@@ -1942,7 +1942,7 @@ function ExpenseDetail({expenses,SE,setTab,tabExtra,confirm}) {
 
   return <>
     <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:18}}>
-      <button className="btn-sm" onClick={()=>setTab('finances')}>← Volver</button>
+      <button className="btn-sm" onClick={()=>setTab(tabExtra?.origin||'finances')}>← Volver</button>
       <span style={{fontFamily:'Georgia,serif',fontSize:20,fontWeight:600}}>📤 Detalle Gastos</span>
     </div>
     <select className="inp" value={month} onChange={e=>setM(e.target.value)} style={{marginBottom:14}}>
