@@ -1,11 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
 import { loadData, saveData } from './api.js'
-import AuthShell, { ChangePasswordModal } from './Auth.jsx'
-import ReportsTab from './ReportsTab.jsx'
-
-const AUTH_KEY  = 'sz_auth_email'
-const ROLE_KEY  = 'sz_auth_role'
-const NAME_KEY  = 'sz_auth_name'
 
 /* ══════════════════════════════════════════════════════════════
    CONSTANTS & HELPERS
@@ -66,19 +60,11 @@ const isPastAppt = a => {
 }
 
 // Returns available time slots: filters taken + past-today + custom exclude
-const getSlots = (date, takenApptIds, allAppts, excludeId=null, assignedTo=null) => {
+const getSlots = (date, takenApptIds, allAppts, excludeId=null) => {
   const now     = new Date()
   const isToday = date === todayStr()
   const taken   = allAppts
-    .filter(a => {
-      if (cleanDate(a.date) !== date) return false
-      if (a.id === excludeId) return false
-      // Si hay empleada asignada, solo bloquear las horas de esa empleada
-      if (assignedTo) {
-        return String(a.assignedTo||'').trim().toLowerCase() === String(assignedTo).trim().toLowerCase()
-      }
-      return true
-    })
+    .filter(a => cleanDate(a.date)===date && a.id!==excludeId)
     .map(a => cleanTime(a.time))
 
   return TIME_SLOTS.map(t => {
@@ -136,19 +122,10 @@ export default function App() {
   const [services, setS]   = useState([])
   const [appts,    setA]   = useState([])
   const [expenses, setE]   = useState([])
-  const [users,    setU]   = useState([])
   const [status,   setSt]  = useState('loading')
   const [errMsg,   setEM]  = useState('')
   const [lastSync, setLS]  = useState(null)
   const [modal,    setModal] = useState(null) // {msg, onOk} or {type:'info', msg}
-  const [userEmail,   setUserEmail]  = useState(() => localStorage.getItem(AUTH_KEY) || null)
-  const [userRole,    setUserRole]   = useState(() => localStorage.getItem(ROLE_KEY)  || 'Empleada')
-  const [userName,    setUserName]   = useState(() => localStorage.getItem(NAME_KEY)   || '')
-  const [showChangePw, setShowChangePw] = useState(false)
-  const [userMenuOpen, setUserMenuOpen]  = useState(false)
-
-  const handleLogin  = (email, role='Empleada', name='') => { localStorage.setItem(AUTH_KEY, email); localStorage.setItem(ROLE_KEY, role); localStorage.setItem(NAME_KEY, name); setUserEmail(email); setUserRole(role); setUserName(name) }
-  const handleLogout = () => { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(ROLE_KEY); localStorage.removeItem(NAME_KEY); setUserEmail(null); setUserRole('Empleada'); setUserName('') }
 
   const setTab = (t, extra=null) => { setTabRaw(t); setTabExtra(extra) }
 
@@ -160,7 +137,6 @@ export default function App() {
       setS(Array.isArray(d.services)&&d.services.length?d.services:DEFAULT_SERVICES)
       setA(Array.isArray(d.appointments)?d.appointments:[])
       setE(Array.isArray(d.expenses)?d.expenses:[])
-      setU(Array.isArray(d.users)?d.users:[])
       setSt('ok'); setLS(new Date())
     }).catch(e => {
       setEM(e.message); setSt('error')
@@ -181,9 +157,9 @@ export default function App() {
     const km={clients:'sb_c',services:'sb_s',appointments:'sb_a',expenses:'sb_e'}
     Object.entries(payload).forEach(([k,v])=>{if(km[k])try{localStorage.setItem(km[k],JSON.stringify(v))}catch{}})
     setSt('saving')
-    try { const r=await saveData(payload, userEmail); setSt('ok'); setLS(new Date()); return r }
+    try { const r=await saveData(payload); setSt('ok'); setLS(new Date()); return r }
     catch(e) { setEM(e.message); setSt('error'); setTimeout(()=>setSt('ok'),5000); return null }
-  }, [userEmail])
+  }, [])
 
   const SC = useCallback((v,x={})=>sync({clients:v,...x},     setC,v),[sync])
   const SS = useCallback((v,x={})=>sync({services:v,...x},    setS,v),[sync])
@@ -200,26 +176,12 @@ export default function App() {
       saveData({action:'deleteCalendarEvent',eventId:appt.calendarEventId}).catch(()=>{})
   }, [appts, SA])
 
-  const isAdmin = userRole === 'Administradora'
-
-  // Mapa email → nombre para mostrar nombres reales en lugar de derivar del correo
-  const userNameMap = {}
-  users.forEach(u => { if (u.email) userNameMap[u.email.trim().toLowerCase()] = u.name || '' })
-  // También incluir el usuario actual en el mapa
-  if (userEmail && userName) userNameMap[userEmail.trim().toLowerCase()] = userName
-
-  // Empleada only sees her own expenses and her own appts
-  const visibleExpenses = isAdmin ? expenses : expenses.filter(e => e.createdBy === userEmail)
-  const visibleAppts    = isAdmin ? appts    : appts.filter(a => a.assignedTo === userEmail || a.createdBy === userEmail || (!a.assignedTo && !a.createdBy))
-
-  const p = {clients,services,appts,visibleAppts,expenses,visibleExpenses,SC,SS,SA,SE,sync,deleteAppt,setTab,confirm,infoModal,tabExtra,userEmail,userRole,isAdmin,userName,users,userNameMap}
+  const p = {clients,services,appts,expenses,SC,SS,SA,SE,sync,deleteAppt,setTab,confirm,infoModal,tabExtra}
 
   if (status==='loading') return <Cent><div style={{fontSize:52,animation:'pulse 2s ease-in-out infinite'}}>🌸</div></Cent>
   if (status==='noconfig') return <Cent><div style={{fontSize:36,marginBottom:8}}>⚙️</div><p style={{fontSize:16,fontWeight:600}}>Configura VITE_SCRIPT_URL y VITE_TOKEN en Vercel</p></Cent>
 
   return (
-    <AuthShell onLogin={handleLogin} onLogout={handleLogout} userEmail={userEmail} userRole={userRole} userName={userName}>
-      {showChangePw && <ChangePasswordModal email={userEmail} onClose={()=>setShowChangePw(false)}/>}
     <div style={{fontFamily:"'DM Sans',system-ui,sans-serif",minHeight:'100vh',background:'var(--bg)',color:'var(--t)'}}>
       <GS/>
       {modal?.type==='confirm' && <Modal msg={modal.msg} onOk={()=>{modal.onOk();setModal(null)}} onCancel={()=>setModal(null)}/>}
@@ -236,31 +198,17 @@ export default function App() {
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <button onClick={()=>refresh(true)} style={{background:'rgba(255,255,255,0.15)',border:'none',borderRadius:20,padding:'5px 10px',color:'white',fontSize:14,cursor:'pointer',fontFamily:'inherit',fontWeight:600}}>↻</button>
           <SyncBadge status={status} lastSync={lastSync}/>
-          <div style={{position:'relative'}}>
-            <button onClick={()=>setUserMenuOpen(v=>!v)} style={{background:'rgba(255,255,255,0.18)',border:'none',borderRadius:20,padding:'5px 10px',color:'white',fontSize:13,cursor:'pointer',fontFamily:'inherit',fontWeight:600,display:'flex',alignItems:'center',gap:5}}>
-              👤 <span style={{maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:11}}>{userName || (userEmail||'').split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</span>
-            </button>
-            {userMenuOpen && (
-              <div style={{position:'absolute',right:0,top:'calc(100% + 8px)',background:'white',borderRadius:12,boxShadow:'0 4px 24px rgba(0,0,0,.15)',padding:'8px',minWidth:180,zIndex:200}} onClick={()=>setUserMenuOpen(false)}>
-                <div style={{fontSize:11,color:'#999',padding:'4px 10px 8px',borderBottom:'1px solid #f0e8e8',marginBottom:6}}>{userName && <strong style={{display:'block',color:'#555',fontSize:12}}>{userName}</strong>}{userEmail}</div>
-                <button onClick={()=>setShowChangePw(true)} style={{width:'100%',textAlign:'left',background:'none',border:'none',padding:'9px 12px',fontSize:14,cursor:'pointer',fontFamily:'inherit',borderRadius:8,color:'#333',fontWeight:500}}>🔑 Cambiar contraseña</button>
-                <button onClick={handleLogout} style={{width:'100%',textAlign:'left',background:'none',border:'none',padding:'9px 12px',fontSize:14,cursor:'pointer',fontFamily:'inherit',borderRadius:8,color:'#B85C6E',fontWeight:600}}>🚪 Cerrar sesión</button>
-              </div>
-            )}
-          </div>
         </div>
       </header>
 
       <nav style={{background:'white',borderBottom:'1px solid var(--border)',display:'flex',overflowX:'auto',padding:'0 2px',position:'sticky',top:58,zIndex:99,scrollbarWidth:'none'}}>
         {[
-          ['dashboard',  'grid',   'Panel',      true],
-          ['appointments','cal',   'Citas',       true],
-          ['clients',    'people', 'Clientes',    true],
-          ['services',   'stars',  'Servicios',   isAdmin],
-          ['finances',   'chart',  'Finanzas',    isAdmin],
-          ['reports',    'stats',  'Reportes',    isAdmin],
-          ['my-expenses','wallet', 'Mis Gastos',  !isAdmin],
-        ].filter(([,,, show])=>show).map(([id,ic,lb])=>(
+          ['dashboard',  'grid',   'Panel'],
+          ['appointments','cal',   'Citas'],
+          ['clients',    'people', 'Clientes'],
+          ['services',   'stars',  'Servicios'],
+          ['finances',   'chart',  'Finanzas'],
+        ].map(([id,ic,lb])=>(
           <button key={id} onClick={()=>setTab(id)} className={`nb${tab===id?' act':''}`}
             style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,paddingTop:9,paddingBottom:9,paddingLeft:12,paddingRight:12}}>
             <NavIcon type={ic} active={tab===id}/>
@@ -281,8 +229,6 @@ export default function App() {
         {tab==='client-history'  && <ClientHistory   {...p}/>}
         {tab==='comparison'      && <MonthComparison {...p}/>}
         {tab==='top-services'    && <TopServices     {...p}/>}
-        {tab==='reports'         && isAdmin && <ReportsTab {...p}/>}
-        {tab==='my-expenses'     && !isAdmin && <MyExpensesTab {...p}/>}
       </main>
 
       <footer style={{textAlign:'center',padding:'20px 14px 28px',borderTop:'1px solid var(--border)',marginTop:8,background:'white'}}>
@@ -298,171 +244,6 @@ export default function App() {
           </svg>
         </span>
       </footer>
-    </div>
-    </AuthShell>
-  )
-}
-
-/* ══════════════════════════════════════════════════════════════
-   MY EXPENSES TAB — vista de empleada (solo sus gastos)
-══════════════════════════════════════════════════════════════ */
-function MyExpensesTab({expenses, visibleExpenses, SE, confirm, userEmail}) {
-  const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7)
-  const capFirst = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : s
-  const fmt = n => Number(n||0).toLocaleString('es-CO')
-  const fmtM2 = n => '$'+Number(n||0).toLocaleString('es-CO')
-
-  const today = new Date().toISOString().slice(0,10)
-  const [desc, setD]     = useState('')
-  const [amount, setA]   = useState('')
-  const [cat, setCat]    = useState('Insumos')
-  const [expDate, setED] = useState(today)
-  const [editId, setEI]  = useState(null)
-  const [editData, setED2] = useState({})
-  const [month, setM]    = useState(today.slice(0,7))
-
-  // Categorías fijas — empleada NO puede crear categorías nuevas
-  const CATS = [...DEF_CATS]
-  const safe = Array.isArray(visibleExpenses) ? visibleExpenses : []
-  const allExpenses = Array.isArray(expenses) ? expenses : []
-  const months = [...new Set([...safe.map(e=>cleanDate(e.date).slice(0,7)), today.slice(0,7)].filter(Boolean))].sort((a,b)=>b.localeCompare(a))
-  const me = safe.filter(e=>cleanDate(e.date).slice(0,7)===month)
-  const total = me.reduce((s,e)=>s+toN(e.amount||0),0)
-
-  const add = () => {
-    if (!desc.trim()||!amount) return
-    SE([...allExpenses, {id:uid(),description:capFirst(desc),amount:Number(amount),category:cat,date:expDate,createdBy:userEmail||''}])
-    setD(''); setA('')
-  }
-
-  const saveEdit = () => {
-    SE(allExpenses.map(e=>e.id===editId?{...e,...editData,description:capFirst(editData.description||'')}:e))
-    setEI(null)
-  }
-
-  const delExpense = (e) => {
-    confirm(`¿Eliminar el gasto "${e.description}"?`, ()=>SE(allExpenses.filter(x=>x.id!==e.id)))
-  }
-
-  const P = '#B85C6E', PL = '#FDF6F0', PB = '#F5D0D8'
-  const monthLabel = m => new Date(m+'-01T12:00:00').toLocaleDateString('es-CO',{month:'long',year:'numeric'})
-
-  return (
-    <div style={{padding:'0 16px 80px'}}>
-      <div style={{fontFamily:'Georgia,serif',fontSize:22,fontWeight:600,color:'var(--t)',marginBottom:4}}>Mis Gastos</div>
-      <div style={{fontSize:13,color:'#aaa',marginBottom:16}}>Solo ves y gestionas los gastos que tú registraste</div>
-
-      {/* Selector de mes */}
-      <div style={{marginBottom:14}}>
-        <label className="lbl">Ver mes</label>
-        <select className="inp" value={month} onChange={e=>setM(e.target.value)}>
-          {months.map(m=><option key={m} value={m}>{monthLabel(m)}</option>)}
-        </select>
-      </div>
-
-      {/* Total */}
-      <div style={{background:PL,borderRadius:14,padding:'16px 20px',marginBottom:20,display:'flex',justifyContent:'space-between',alignItems:'center',border:`1px solid ${PB}`}}>
-        <div>
-          <div style={{fontSize:11,fontWeight:700,color:'#999',textTransform:'uppercase',letterSpacing:'.06em'}}>Total del mes</div>
-          <div style={{fontSize:28,fontWeight:800,color:P,letterSpacing:'-1px'}}>{fmtM2(total)}</div>
-        </div>
-        <div style={{fontSize:11,color:'#bbb',textAlign:'right'}}>{me.length} gasto{me.length!==1?'s':''}</div>
-      </div>
-
-      {/* Formulario nuevo gasto */}
-      <div className="card">
-        <div style={{fontWeight:700,fontSize:15,marginBottom:14}}>➕ Nuevo gasto</div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-          <div style={{gridColumn:'1/-1'}}>
-            <label className="lbl">Descripción</label>
-            <input className="inp" value={desc}
-              onChange={e=>setD(capFirst(e.target.value))}
-              placeholder="Ej: Cera depilatoria"/>
-          </div>
-          <div>
-            <label className="lbl">Monto (COP)</label>
-            <input className="inp" type="number" placeholder="20000" value={amount} onChange={e=>setA(e.target.value)}/>
-          </div>
-          <div>
-            <label className="lbl">Fecha</label>
-            <input type="date" className="inp" value={expDate} onChange={e=>setED(e.target.value)}/>
-          </div>
-          <div style={{gridColumn:'1/-1'}}>
-            <label className="lbl">Categoría</label>
-            <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:4}}>
-              {CATS.map(c=>(
-                <button key={c} onClick={()=>setCat(c)}
-                  style={{padding:'6px 14px',borderRadius:20,border:`1.5px solid ${cat===c?P:PB}`,
-                    background:cat===c?P:'white',color:cat===c?'white':'#666',
-                    fontFamily:'inherit',fontSize:12,fontWeight:600,cursor:'pointer',transition:'all .15s'}}>
-                  {c}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-        <button className="btn" style={{width:'100%'}} onClick={add} disabled={!desc.trim()||!amount}>
-          Registrar gasto
-        </button>
-      </div>
-
-      {/* Lista */}
-      {me.length===0 ? (
-        <div style={{textAlign:'center',padding:'40px',color:'#ccc'}}>
-          <div style={{fontSize:32,marginBottom:8}}>🧾</div>
-          <div>No hay gastos en este mes</div>
-        </div>
-      ) : (
-        <div className="card">
-          <div style={{fontWeight:700,fontSize:15,marginBottom:12}}>📋 Gastos del mes</div>
-          {[...me].sort((a,b)=>cleanDate(a.date).localeCompare(cleanDate(b.date))).map(e=>{
-            const isEdit = editId===e.id
-            return (
-              <div key={e.id} style={{padding:'10px 0',borderBottom:'1px solid #FBF0F3'}}>
-                {isEdit ? (
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                    <div style={{gridColumn:'1/-1'}}>
-                      <label className="lbl">Descripción</label>
-                      <input className="inp" value={editData.description||''}
-                        onChange={ev=>setED2(d=>({...d,description:capFirst(ev.target.value)}))}
-                        placeholder="Descripción"/>
-                    </div>
-                    <div><label className="lbl">Monto</label><input className="inp" type="number" value={editData.amount||''} onChange={ev=>setED2(d=>({...d,amount:ev.target.value}))}/></div>
-                    <div><label className="lbl">Fecha</label><input type="date" className="inp" value={editData.date||''} onChange={ev=>setED2(d=>({...d,date:ev.target.value}))}/></div>
-                    <div style={{gridColumn:'1/-1'}}>
-                      <label className="lbl">Categoría</label>
-                      <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:4}}>
-                        {CATS.map(c=>(
-                          <button key={c} onClick={()=>setED2(d=>({...d,category:c}))}
-                            style={{padding:'5px 12px',borderRadius:20,border:`1.5px solid ${(editData.category||cat)===c?P:PB}`,
-                              background:(editData.category||cat)===c?P:'white',color:(editData.category||cat)===c?'white':'#666',
-                              fontFamily:'inherit',fontSize:12,fontWeight:600,cursor:'pointer'}}>
-                            {c}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div style={{gridColumn:'span 2',display:'flex',gap:8}}>
-                      <button className="btn" style={{flex:1}} onClick={saveEdit}>Guardar</button>
-                      <button className="btn-del" onClick={()=>setEI(null)}>Cancelar</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontWeight:600,fontSize:13,color:'#222',marginBottom:2}}>{e.description}</div>
-                      <div style={{fontSize:11,color:'var(--t2)'}}>{e.category} · {fmtDate(e.date)}</div>
-                    </div>
-                    <span style={{fontWeight:700,color:P,fontSize:14,flexShrink:0}}>{fmtM2(e.amount)}</span>
-                    <button className="btn-edit" onClick={()=>{setEI(e.id);setED2({...e})}}>✏️</button>
-                    <button className="btn-del" onClick={()=>delExpense(e)}>✕</button>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
     </div>
   )
 }
@@ -530,21 +311,6 @@ function NavIcon({type, active}) {
         <rect x="9" y="9" width="4" height="11" rx="1.5" fill={c} opacity={active?1:.8}/>
         <rect x="16" y="5" width="4" height="15" rx="1.5" fill={c}/>
         <line x1="2" y1="20.5" x2="20" y2="20.5" stroke={c} strokeWidth="1.5" strokeLinecap="round"/>
-      </svg>
-    ),
-    stats: (
-      <svg style={s} width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <circle cx="11" cy="11" r="8.5" stroke={c} strokeWidth="1.8" fill="none"/>
-        <path d="M11 6v5l3 3" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        <circle cx="11" cy="11" r="1.5" fill={c}/>
-      </svg>
-    ),
-    wallet: (
-      <svg style={s} width="22" height="22" viewBox="0 0 22 22" fill="none">
-        <rect x="2" y="6" width="18" height="13" rx="2.5" stroke={c} strokeWidth="1.8" fill="none"/>
-        <path d="M2 10h18" stroke={c} strokeWidth="1.5"/>
-        <circle cx="15.5" cy="14" r="1.5" fill={c}/>
-        <path d="M6 3h10" stroke={c} strokeWidth="1.8" strokeLinecap="round" opacity=".6"/>
       </svg>
     ),
   }
@@ -618,12 +384,11 @@ function GS() { return <style>{`
 /* ══════════════════════════════════════════════════════════════
    DASHBOARD
 ══════════════════════════════════════════════════════════════ */
-function Dashboard({clients,appts,visibleAppts,expenses,setTab,userEmail,isAdmin,userName}) {
+function Dashboard({clients,appts,expenses,setTab}) {
   const [selMonth, setSelMonth] = useState(()=>new Date().toISOString().slice(0,7))
   const [finTab,   setFinTab]   = useState('general')
   const td = todayStr()
-  const dispA = isAdmin ? appts : (visibleAppts||appts)
-  const ta = [...dispA].filter(a=>cleanDate(a.date)===td).sort((a,b)=>cleanTime(a.time).localeCompare(cleanTime(b.time)))
+  const ta = [...appts].filter(a=>cleanDate(a.date)===td).sort((a,b)=>cleanTime(a.time).localeCompare(cleanTime(b.time)))
   const safeA = Array.isArray(appts)?appts:[]
   const safeE = Array.isArray(expenses)?expenses:[]
 
@@ -661,9 +426,7 @@ function Dashboard({clients,appts,visibleAppts,expenses,setTab,userEmail,isAdmin
 
   return <>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
-      <div style={{fontFamily:'Georgia,serif',fontSize:21,fontWeight:600,color:'var(--t)'}}>
-        Bienvenida, {userName || (userEmail||'').split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase())} {'\u2728'}
-      </div>
+      <div style={{fontFamily:'Georgia,serif',fontSize:21,fontWeight:600,color:'var(--t)'}}>Bienvenida {'\u2728'}</div>
       <div style={{fontSize:11,color:'var(--t2)'}}>{new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long'})}</div>
     </div>
 
@@ -682,7 +445,7 @@ function Dashboard({clients,appts,visibleAppts,expenses,setTab,userEmail,isAdmin
       </div>
     </div>
 
-    {isAdmin && <div className="card" style={{marginBottom:14,padding:0,overflow:'hidden'}}>
+    <div className="card" style={{marginBottom:14,padding:0,overflow:'hidden'}}>
       <div style={{background:netoPos?'linear-gradient(135deg,var(--primary),var(--primary-d))':'linear-gradient(135deg,#B04040,#843030)',padding:'16px 18px',cursor:'pointer'}} onClick={()=>setTab('finances')}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4}}>
           <div style={{fontSize:10,color:'rgba(255,255,255,0.8)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.09em'}}>
@@ -715,12 +478,12 @@ function Dashboard({clients,appts,visibleAppts,expenses,setTab,userEmail,isAdmin
       )}
 
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,padding:'14px 16px'}}>
-        <div style={{textAlign:'center',background:'#EDF7F0',borderRadius:12,padding:'11px 6px',cursor:'pointer'}} onClick={()=>setTab('income-detail', {month:isMonth?selMonth:undefined, from:'dashboard'})}>
+        <div style={{textAlign:'center',background:'#EDF7F0',borderRadius:12,padding:'11px 6px',cursor:'pointer'}} onClick={()=>setTab('income-detail', isMonth?{month:selMonth}:{})}>
           <div style={{fontSize:10,color:'var(--green)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:3}}>Recibido</div>
           <div style={{fontFamily:'Georgia,serif',fontSize:14,fontWeight:700,color:'var(--green)'}}>{fmtM(aRevDone)}</div>
           <div style={{fontSize:10,color:'var(--green)',marginTop:2}}>{aDone.length} citas</div>
         </div>
-        <div style={{textAlign:'center',background:'#FFF8E6',borderRadius:12,padding:'11px 6px',cursor:'pointer'}} onClick={()=>setTab('income-detail', {filter:'pending', month:isMonth?selMonth:undefined, from:'dashboard'})}>
+        <div style={{textAlign:'center',background:'#FFF8E6',borderRadius:12,padding:'11px 6px',cursor:'pointer'}} onClick={()=>setTab('income-detail', isMonth?{filter:'pending',month:selMonth}:{filter:'pending'})}>
           <div style={{fontSize:10,color:'var(--gold)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:3}}>Pendiente</div>
           <div style={{fontFamily:'Georgia,serif',fontSize:14,fontWeight:700,color:'var(--gold)'}}>{fmtM(aRevPend)}</div>
           <div style={{fontSize:10,color:'var(--gold)',marginTop:2}}>{aPend.length} {'\u2192'}</div>
@@ -739,7 +502,7 @@ function Dashboard({clients,appts,visibleAppts,expenses,setTab,userEmail,isAdmin
           </div>
         </div>
       )}
-    </div>}
+    </div>
 
     <div className="card">
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
@@ -899,23 +662,22 @@ function MonthlyBalance({appts,expenses,selMonth,setSelMonth,setTab}) {
 /* ══════════════════════════════════════════════════════════════
    APPOINTMENTS TAB — Fixed accordion (independent toggle)
 ══════════════════════════════════════════════════════════════ */
-function ApptsTab({clients,services,appts,visibleAppts,SA,SC,sync,deleteAppt,confirm,infoModal,userEmail,isAdmin,userName,users,userNameMap,tabExtra,setTab}) {
+function ApptsTab({clients,services,appts,SA,SC,sync,deleteAppt,confirm,infoModal}) {
   const [showNew,  setNew]  = useState(false)
   const [editAppt, setEdit] = useState(null)
   // Only "today" open by default — each group toggles independently
   const [open, setOpen] = useState({today:true, tomorrow:false, upcoming:false, noshow:false, past:false})
   const td = todayStr(), tm = tomorrowStr()
-  const dispAppts = isAdmin ? appts : (visibleAppts||appts)
 
   const toggle = k => setOpen(p => ({...p, [k]: !p[k]}))
 
   // Groups — past includes today-past
   const groups = {
-    today:    dispAppts.filter(a=>cleanDate(a.date)===td && !isPastAppt(a)),
-    tomorrow: dispAppts.filter(a=>cleanDate(a.date)===tm),
-    upcoming: dispAppts.filter(a=>{ const d=cleanDate(a.date); return d>tm }),
-    past:     dispAppts.filter(a=>isPastAppt(a)&&a.completed!=='noshow'),
-    noshow:   dispAppts.filter(a=>a.completed==='noshow')
+    today:    appts.filter(a=>cleanDate(a.date)===td && !isPastAppt(a)),
+    tomorrow: appts.filter(a=>cleanDate(a.date)===tm),
+    upcoming: appts.filter(a=>{ const d=cleanDate(a.date); return d>tm }),
+    past:     appts.filter(a=>isPastAppt(a)&&a.completed!=='noshow'),
+    noshow:   appts.filter(a=>a.completed==='noshow')
   }
 
   const sortG = arr => [...arr].sort((a,b)=>`${cleanDate(a.date)}${cleanTime(a.time)}`.localeCompare(`${cleanDate(b.date)}${cleanTime(b.time)}`))
@@ -930,10 +692,10 @@ function ApptsTab({clients,services,appts,visibleAppts,SA,SC,sync,deleteAppt,con
     SA(next)
   }
 
-  if (showNew)  return <NewWizard  clients={clients} services={services} appts={appts} SA={SA} SC={SC} sync={sync} infoModal={infoModal} onClose={()=>setNew(false)} userEmail={userEmail} isAdmin={isAdmin} userName={userName} users={users} userNameMap={userNameMap}/>
-  if (editAppt) return <EditAppt   appt={editAppt} services={services} appts={appts} SA={SA} sync={sync} onClose={()=>setEdit(null)} isAdmin={isAdmin} userEmail={userEmail} users={users} userNameMap={userNameMap}/>
+  if (showNew)  return <NewWizard  clients={clients} services={services} appts={appts} SA={SA} SC={SC} sync={sync} infoModal={infoModal} onClose={()=>setNew(false)}/>
+  if (editAppt) return <EditAppt   appt={editAppt} services={services} appts={appts} SA={SA} sync={sync} onClose={()=>setEdit(null)}/>
 
-  const AccGroup = ({label,color,gKey,items,canEdit=true,uMap=userNameMap}) => {
+  const AccGroup = ({label,color,gKey,items,canEdit=true}) => {
     if (items.length===0) return null
     const sum     = items.reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
     const doneSum = items.filter(a=>bool(a.completed)&&a.completed!=='noshow').reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
@@ -954,7 +716,7 @@ function ApptsTab({clients,services,appts,visibleAppts,SA,SC,sync,deleteAppt,con
         {isOpen && (
           <div className="slide-in" style={{padding:'4px 12px 12px'}}>
             {sortG(items).map(a=>(
-              <ApptCard key={a.id} appt={a} canEdit={canEdit} userNameMap={uMap}
+              <ApptCard key={a.id} appt={a} canEdit={canEdit}
                 onToggle={(s)=>toggleCompleted(a,s)}
                 onEdit={()=>setEdit(a)}
                 onDelete={()=>confirm(`¿Eliminar la cita de ${a.clientName}? También se borrará el evento de Google Calendar.`,()=>deleteAppt(a))}
@@ -968,10 +730,7 @@ function ApptsTab({clients,services,appts,visibleAppts,SA,SC,sync,deleteAppt,con
 
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-      <div style={{display:'flex',alignItems:'center',gap:10}}>
-        {tabExtra?.from==='reports' && <button className="btn-sm" onClick={()=>setTab('reports')}>← Reportes</button>}
-        <span style={{fontFamily:'Georgia,serif',fontSize:22,fontWeight:600,color:'var(--t)'}}>Citas</span>
-      </div>
+      <span style={{fontFamily:'Georgia,serif',fontSize:22,fontWeight:600,color:'var(--t)'}}>Citas</span>
       <button className="btn" onClick={()=>setNew(true)}>+ Nueva cita</button>
     </div>
     <AccGroup label="Hoy"         color="#B5524A" gKey="today"    items={groups.today}    canEdit={true}/>
@@ -988,7 +747,7 @@ function ApptsTab({clients,services,appts,visibleAppts,SA,SC,sync,deleteAppt,con
   </>
 }
 
-function ApptCard({appt,canEdit,onToggle,onEdit,onDelete,userNameMap={}}) {
+function ApptCard({appt,canEdit,onToggle,onEdit,onDelete}) {
   const calOk  = bool(appt.calendarCreated)
   const dom    = bool(appt.domicilio)
   const status = appt.completed==='noshow' ? 'noshow' : bool(appt.completed) ? 'done' : 'pending'
@@ -1014,7 +773,6 @@ function ApptCard({appt,canEdit,onToggle,onEdit,onDelete,userNameMap={}}) {
         <span className="tag" style={{fontSize:11}}>✨ {appt.serviceNames}</span>
         <span className="tag" style={{fontSize:11}}>📅 {fmtDate(appt.date)}</span>
         <span className="tag" style={{fontSize:11}}>🕐 {fmtTime(appt.time)}</span>
-        {appt.assignedTo && <span className="tag" style={{fontSize:11}}>👩‍💼 {userNameMap[String(appt.assignedTo).trim().toLowerCase()] || (appt.assignedTo||'').split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</span>}
         {dom && <span className="tag-gold" style={{fontSize:11}}>🛵 Domicilio</span>}
         {status==='done'   && <span className="tag-g"    style={{fontSize:11}}>✓ Completada</span>}
         {status==='noshow' && <span style={{display:'inline-block',background:'#FFF0EC',color:'var(--red)',borderRadius:20,padding:'2px 10px',fontSize:12,fontWeight:600}}>✗ No asistió</span>}
@@ -1038,7 +796,7 @@ function ApptCard({appt,canEdit,onToggle,onEdit,onDelete,userNameMap={}}) {
 }
 
 /* ── Edit Appointment — date, time AND services ── */
-function EditAppt({appt,services,appts,SA,sync,onClose,isAdmin,userEmail,users,userNameMap}) {
+function EditAppt({appt,services,appts,SA,sync,onClose}) {
   const safeSvcs = Array.isArray(services)?services:[]
 
   // Build originalIds + original price map from appt data
@@ -1075,27 +833,13 @@ function EditAppt({appt,services,appts,SA,sync,onClose,isAdmin,userEmail,users,u
   const [addr,    setAddr]  = useState(appt.address||'')
   const [loading, setL]     = useState(false)
   const [result,  setR]     = useState(null)
-  const [assignedTo, setAssignedTo] = useState(appt.assignedTo||'')
 
-  const slots    = getSlots(date, [], appts, appt.id, isAdmin ? assignedTo : null)
+  const slots    = getSlots(date, [], appts, appt.id)
   const toggleSvc= id => setSvcIds(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id])
   const selSvcs  = safeSvcs.filter(s=>svcIds.includes(s.id))
   // Price: original price for pre-existing services, current price for newly added
   const svcTotal = svcIds.reduce((s,id)=>s+getPriceFor(id),0)
   const grand    = svcTotal+(dom?toN(domP):0)
-
-  // Conflicto: ¿la empleada asignada ya tiene cita en esa fecha y hora?
-  const conflict = isAdmin && assignedTo && date && time
-    ? (Array.isArray(appts)?appts:[]).find(a =>
-        a.id !== appt.id &&
-        String(a.assignedTo||'').trim().toLowerCase() === String(assignedTo).trim().toLowerCase() &&
-        cleanDate(a.date) === cleanDate(date) &&
-        cleanTime(a.time) === cleanTime(time)
-      )
-    : null
-  const conflictName = conflict
-    ? ((userNameMap||{})[String(assignedTo).trim().toLowerCase()] || String(assignedTo).split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase()))
-    : ''
 
   const save = async () => {
     setL(true)
@@ -1104,8 +848,7 @@ function EditAppt({appt,services,appts,SA,sync,onClose,isAdmin,userEmail,users,u
       ...appt, date, time:cleanTime(time)||time,
       serviceIds:selSvcs.map(s=>s.id).join(','), serviceNames:svcNames,
       servicePrice:svcTotal, domicilio:dom, domicilioPrice:dom?toN(domP):0,
-      totalPrice:grand, address:dom?addr:'',
-      assignedTo: isAdmin ? assignedTo : (appt.assignedTo||userEmail||'')
+      totalPrice:grand, address:dom?addr:''
     }
     const next = appts.map(a=>a.id===appt.id?updated:a)
     await sync({appointments:next},null,null)
@@ -1195,39 +938,6 @@ function EditAppt({appt,services,appts,SA,sync,onClose,isAdmin,userEmail,users,u
       </div>
       {time && <div style={{background:'var(--primary-l)',borderRadius:10,padding:10,fontSize:13,marginBottom:14}}>✅ <strong>{fmtTime(time)}</strong> — {fmtDate(date)}</div>}
 
-      {/* Atendida por */}
-      <div style={{marginBottom:14}}>
-        <label className="lbl">👩‍💼 Atendida por</label>
-        {isAdmin ? (
-          <select className="inp" value={assignedTo} onChange={e=>setAssignedTo(e.target.value)} style={{fontSize:13}}>
-            {(users||[]).filter(u=>u.email).map(u=>(
-              <option key={u.email} value={u.email}>
-                {u.name || u.email.split('@')[0]} — {u.email}
-              </option>
-            ))}
-            {/* Si el assignedTo actual no está en users, mostrarlo igual */}
-            {assignedTo && !(users||[]).some(u=>u.email===assignedTo) && (
-              <option value={assignedTo}>{assignedTo}</option>
-            )}
-          </select>
-        ) : (
-          <input className="inp" value={
-            (userNameMap||{})[String(userEmail||'').trim().toLowerCase()] || userEmail || ''
-          } disabled style={{fontSize:13,background:'#f5f5f5',color:'#888',cursor:'not-allowed'}}/>
-        )}
-      </div>
-
-
-      {/* Aviso de conflicto de horario */}
-      {conflict && (
-        <div style={{background:'#FFF8E1',border:'1.5px solid #F6C90E',borderRadius:12,padding:'12px 14px',marginBottom:14,display:'flex',gap:10,alignItems:'flex-start'}}>
-          <span style={{fontSize:20,flexShrink:0}}>⚠️</span>
-          <div style={{fontSize:13,color:'#7A5C00',lineHeight:1.5}}>
-            <strong>Conflicto de horario:</strong> el día <strong>{fmtDate(date)}</strong> a las <strong>{fmtTime(time)}</strong>, <strong>{conflictName}</strong> ya tiene una cita con <strong>{conflict.clientName}</strong>.
-          </div>
-        </div>
-      )}
-
       {result!==null && <div style={{background:result.ok||result.ok===null?'#EDF7F0':'var(--warn-bg)',borderRadius:10,padding:10,fontSize:13,marginBottom:14,color:result.ok||result.ok===null?'var(--green)':'var(--warn-t)'}}>
         {result.ok===null?'✅ Cita actualizada':result.ok?'✅ Cita y Calendar actualizados':`✅ Cita guardada. Calendar: ${result.error}`}
       </div>}
@@ -1236,7 +946,7 @@ function EditAppt({appt,services,appts,SA,sync,onClose,isAdmin,userEmail,users,u
         ? <button className="btn" style={{width:'100%'}} onClick={onClose}>Listo</button>
         : <div style={{display:'flex',gap:8}}>
             <button className="btn-o" onClick={onClose}>Cancelar</button>
-            <button className="btn" style={{flex:1}} onClick={save} disabled={!time||svcIds.length===0||loading||!!conflict}>{loading?'⏳ Guardando…':'Guardar cambios'}</button>
+            <button className="btn" style={{flex:1}} onClick={save} disabled={!time||svcIds.length===0||loading}>{loading?'⏳ Guardando…':'Guardar cambios'}</button>
           </div>
       }
     </div>
@@ -1246,7 +956,7 @@ function EditAppt({appt,services,appts,SA,sync,onClose,isAdmin,userEmail,users,u
 /* ══════════════════════════════════════════════════════════════
    NEW APPOINTMENT WIZARD
 ══════════════════════════════════════════════════════════════ */
-function NewWizard({clients,services,appts,SA,SC,sync,infoModal,onClose,userEmail,isAdmin,userName,users,userNameMap}) {
+function NewWizard({clients,services,appts,SA,SC,sync,infoModal,onClose}) {
   const [step,    setStep]  = useState(1)
   const [query,   setQ]     = useState('')
   const [suggs,   setSuggs] = useState([])
@@ -1263,7 +973,6 @@ function NewWizard({clients,services,appts,SA,SC,sync,infoModal,onClose,userEmai
   const [loading, setL]     = useState(false)
   const [calR,    setCalR]  = useState(null)
   const [done,    setDone]  = useState(false)
-  const [assignedTo, setAssignedTo] = useState(userEmail||'')
 
   const isPhoneQ = q => /^\d+$/.test(q.replace(/[^0-9]/g,''))
 
@@ -1299,7 +1008,7 @@ function NewWizard({clients,services,appts,SA,SC,sync,infoModal,onClose,userEmai
       return
     }
     if (createM && nameValid(newName) && phoneValid(newPhone)) {
-      const nc = {id:uid(),name:(newName||'').trim().toUpperCase(),phone:newPhone.trim(),createdAt:todayStr()}
+      const nc = {id:uid(),name:capWords(newName),phone:newPhone.trim(),createdAt:todayStr()}
       SC([...clients,nc]); setFc(nc)
     }
     setStep(3)
@@ -1309,19 +1018,7 @@ function NewWizard({clients,services,appts,SA,SC,sync,infoModal,onClose,userEmai
   const selSvcs   = (Array.isArray(services)?services:[]).filter(s=>svcIds.includes(s.id))
   const svcTotal  = selSvcs.reduce((s,x)=>s+toN(x.price),0)
   const grand     = svcTotal+(dom?toN(domP):0)
-  const slots     = getSlots(date,[],appts,null, isAdmin ? assignedTo : null)
-
-  // Conflicto: ¿la empleada asignada ya tiene cita en esa fecha y hora?
-  const conflictNW = isAdmin && assignedTo && date && time
-    ? (Array.isArray(appts)?appts:[]).find(a =>
-        String(a.assignedTo||'').trim().toLowerCase() === String(assignedTo).trim().toLowerCase() &&
-        cleanDate(a.date) === cleanDate(date) &&
-        cleanTime(a.time) === cleanTime(time)
-      )
-    : null
-  const conflictNWName = conflictNW
-    ? ((userNameMap||{})[String(assignedTo).trim().toLowerCase()] || String(assignedTo).split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase()))
-    : ''
+  const slots     = getSlots(date,[],appts)
 
   const confirm = async () => {
     setL(true)
@@ -1332,8 +1029,7 @@ function NewWizard({clients,services,appts,SA,SC,sync,infoModal,onClose,userEmai
       servicePrice:svcTotal, domicilio:dom, domicilioPrice:dom?toN(domP):0,
       totalPrice:grand, address:dom?addr:'',
       date, time:cleanTime(time)||time,
-      createdAt:new Date().toISOString(), calendarCreated:false, calendarEventId:'', completed:false,
-      assignedTo: assignedTo||userEmail||'', createdBy: userEmail||''
+      createdAt:new Date().toISOString(), calendarCreated:false, calendarEventId:'', completed:false
     }
     const res = await sync({
       appointments:[...appts,appt],
@@ -1486,45 +1182,16 @@ function NewWizard({clients,services,appts,SA,SC,sync,infoModal,onClose,userEmai
       {time && <div style={{background:'var(--primary-l)',borderRadius:10,padding:10,fontSize:13,marginBottom:14}}>
         ✅ <strong>{fmtTime(time)}</strong> hasta aprox. <strong>{fmtTime(`${String(parseInt(time)+1).padStart(2,'0')}:${time.split(':')[1]}`)}</strong>
       </div>}
-      <div style={{marginBottom:16}}>
-        <label className="lbl">👩‍💼 Atendida por</label>
-        {isAdmin ? (
-          <select className="inp" value={assignedTo} onChange={e=>setAssignedTo(e.target.value)} style={{fontSize:13}}>
-            {(users||[]).filter(u=>u.email).map(u=>(
-              <option key={u.email} value={u.email}>
-                {u.name || u.email.split('@')[0]} — {u.email}
-              </option>
-            ))}
-            {assignedTo && !(users||[]).some(u=>u.email===assignedTo) && (
-              <option value={assignedTo}>{assignedTo}</option>
-            )}
-          </select>
-        ) : (
-          <input className="inp"
-            value={userName || (userEmail||'').split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}
-            disabled
-            style={{fontSize:13, background:'#f5f5f5', color:'#888', cursor:'not-allowed'}}
-          />
-        )}
-      </div>
       <div style={{display:'flex',gap:8}}>
         <button className="btn-o" onClick={()=>setStep(3)}>Atrás</button>
-        {conflictNW && (
-          <div style={{background:'#FFF8E1',border:'1.5px solid #F6C90E',borderRadius:12,padding:'12px 14px',marginBottom:14,display:'flex',gap:10,alignItems:'flex-start'}}>
-            <span style={{fontSize:20,flexShrink:0}}>⚠️</span>
-            <div style={{fontSize:13,color:'#7A5C00',lineHeight:1.5}}>
-              <strong>Conflicto de horario:</strong> el día <strong>{fmtDate(date)}</strong> a las <strong>{fmtTime(time)}</strong>, <strong>{conflictNWName}</strong> ya tiene una cita con <strong>{conflictNW.clientName}</strong>.
-            </div>
-          </div>
-        )}
-        <button className="btn" style={{flex:1}} onClick={()=>setStep(4.5)} disabled={!time||!!conflictNW}>Ver resumen</button>
+        <button className="btn" style={{flex:1}} onClick={()=>setStep(4.5)} disabled={!time}>Ver resumen</button>
       </div>
     </div>}
 
     {/* S4.5 — Summary */}
     {step===4.5&&!loading&&!done && <div className="card">
       <div style={{fontFamily:'Georgia,serif',fontSize:18,marginBottom:16}}>Confirmar cita</div>
-      {[['👤 Cliente',fc?.name],['📱 Teléfono',fc?.phone],['✨ Servicios',selSvcs.map(s=>s.name).join(', ')],['💳 Servicios',fmtM(svcTotal)],...(dom?[['🛵 Domicilio',fmtM(domP)],['📍 Dirección',addr||'—']]:[]),['👩‍💼 Atendida por', (userNameMap||{})[String(assignedTo||userEmail||'').trim().toLowerCase()] || (assignedTo||userEmail||'').split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase())]]
+      {[['👤 Cliente',fc?.name],['📱 Teléfono',fc?.phone],['✨ Servicios',selSvcs.map(s=>s.name).join(', ')],['💳 Servicios',fmtM(svcTotal)],...(dom?[['🛵 Domicilio',fmtM(domP)],['📍 Dirección',addr||'—']]:[])]
         .map(([l,v])=><div key={l} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #FBF0F3',fontSize:14}}><span style={{color:'var(--t2)'}}>{l}</span><span style={{fontWeight:600,maxWidth:'60%',textAlign:'right'}}>{v}</span></div>)
       }
       <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',fontSize:16}}><span style={{fontWeight:700}}>💎 Total</span><span style={{fontWeight:700,color:'var(--primary)',fontSize:18}}>{fmtM(grand)}</span></div>
@@ -1587,7 +1254,7 @@ function ClientsTab({clients,appts,SC,confirm,infoModal,setTab}) {
     const dup   = safe.find(c=>(c.phone||'').replace(/\D/g,'')===clean)
     if (dup) { infoModal(`Ya existe "${dup.name}" con ese número. No se puede duplicar.`); return }
     if (!nameValid(name)||!phoneValid(phone)) return
-    SC([...safe,{id:uid(),name:(name||'').trim().toUpperCase(),phone:phone.trim(),createdAt:todayStr()}])
+    SC([...safe,{id:uid(),name:capWords(name),phone:phone.trim(),createdAt:todayStr()}])
     setN(''); setP('')
   }
 
@@ -1595,7 +1262,7 @@ function ClientsTab({clients,appts,SC,confirm,infoModal,setTab}) {
     const clean = editData.phone?.replace(/\D/g,'')||''
     const dup   = safe.find(x=>x.id!==c.id&&(x.phone||'').replace(/\D/g,'')===clean)
     if (dup) { infoModal(`Ya existe "${dup.name}" con ese número.`); return }
-    SC(safe.map(x=>x.id===c.id?{...c,...editData,name:(editData.name||c.name||'').trim().toUpperCase()}:x)); setEI(null)
+    SC(safe.map(x=>x.id===c.id?{...c,...editData,name:capWords(editData.name||c.name)}:x)); setEI(null)
   }
 
   const filt = safe.filter(c=>String(c.name||'').toLowerCase().includes(srch.toLowerCase())||String(c.phone||'').includes(srch))
@@ -1705,7 +1372,7 @@ function ServicesTab({services,SS,confirm}) {
 /* ══════════════════════════════════════════════════════════════
    FINANCES TAB
 ══════════════════════════════════════════════════════════════ */
-function FinancesTab({appts,expenses,SE,setTab,confirm,userEmail,userNameMap={}}) {
+function FinancesTab({appts,expenses,SE,setTab,confirm}) {
   const [month,setM]=useState(new Date().toISOString().slice(0,7))
   const [desc,setD]=useState(''), [amount,setA]=useState(''), [cat,setC]=useState('Insumos'), [expDate,setED]=useState(todayStr())
   const [editId,setEI]=useState(null), [editData,setEData]=useState({})
@@ -1723,7 +1390,7 @@ function FinancesTab({appts,expenses,SE,setTab,confirm,userEmail,userNameMap={}}
 
   const add=()=>{
     if(!desc.trim()||!amount)return
-    SE([...safe,{id:uid(),description:capFirst(desc),amount:Number(amount),category:customCat||cat,date:expDate,createdBy:userEmail||''}])
+    SE([...safe,{id:uid(),description:capFirst(desc),amount:Number(amount),category:customCat||cat,date:expDate}])
     setD('');setA('');setCC('')
   }
   const saveEdit=()=>{SE(safe.map(e=>e.id===editId?{...e,...editData}:e));setEI(null)}
@@ -1773,7 +1440,7 @@ function FinancesTab({appts,expenses,SE,setTab,confirm,userEmail,userNameMap={}}
     <div className="card">
       <div style={{fontWeight:700,fontSize:15,marginBottom:14}}>📤 Agregar gasto</div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-        <div><label className="lbl">Descripción</label><input className="inp" placeholder="Ej: Cera" value={desc} onChange={e=>setD(capFirst(e.target.value))}/></div>
+        <div><label className="lbl">Descripción</label><input className="inp" placeholder="Ej: Cera" value={desc} onChange={e=>setD(e.target.value)}/></div>
         <div><label className="lbl">Monto (COP)</label><input className="inp" type="number" placeholder="20000" value={amount} onChange={e=>setA(e.target.value)}/></div>
         <div>
           <label className="lbl">Categoría</label>
@@ -1795,14 +1462,14 @@ function FinancesTab({appts,expenses,SE,setTab,confirm,userEmail,userNameMap={}}
         return <div key={e.id} style={{padding:'10px 0',borderBottom:'1px solid #FBF0F3'}}>
           {isEdit
             ?<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-              <div><label className="lbl">Descripción</label><input className="inp" value={editData.description||''} onChange={x=>setEData(p=>({...p,description:capFirst(x.target.value)}))}/></div>
+              <div><label className="lbl">Descripción</label><input className="inp" value={editData.description||''} onChange={x=>setEData(p=>({...p,description:x.target.value}))}/></div>
               <div><label className="lbl">Monto</label><input className="inp" type="number" value={editData.amount||''} onChange={x=>setEData(p=>({...p,amount:x.target.value}))}/></div>
               <div><label className="lbl">Cat.</label><input className="inp" list="cats-f" value={editData.category||''} onChange={x=>setEData(p=>({...p,category:x.target.value}))}/><datalist id="cats-f">{allCats.map(c=><option key={c} value={c}/>)}</datalist></div>
               <div><label className="lbl">Fecha</label><input type="date" className="inp" value={editData.date||''} onChange={x=>setEData(p=>({...p,date:x.target.value}))}/></div>
               <div style={{gridColumn:'span 2',display:'flex',gap:8}}><button className="btn" style={{flex:1}} onClick={saveEdit}>Guardar</button><button className="btn-del" onClick={()=>setEI(null)}>Cancelar</button></div>
             </div>
             :<div style={{display:'flex',alignItems:'center',gap:8}}>
-              <div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,fontSize:13}}>{e.description}</div><div style={{fontSize:11,color:'var(--t2)'}}>{e.category} · {fmtDate(e.date)}{e.createdBy&&<span style={{color:'#B85C6E',marginLeft:6}}>· {userNameMap[String(e.createdBy).trim().toLowerCase()] || String(e.createdBy).split('@')[0]}</span>}</div></div>
+              <div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,fontSize:13}}>{e.description}</div><div style={{fontSize:11,color:'var(--t2)'}}>{e.category} · {fmtDate(e.date)}</div></div>
               <span style={{fontWeight:700,color:'var(--red)',fontSize:13,flexShrink:0}}>{fmtM(e.amount)}</span>
               <button className="btn-edit" onClick={()=>{setEI(e.id);setEData({...e})}}>✏️</button>
               <button className="btn-del" onClick={()=>confirm(`¿Eliminar el gasto "${e.description}"?`,()=>SE(safe.filter(x=>x.id!==e.id)))}>✕</button>
@@ -1817,7 +1484,7 @@ function FinancesTab({appts,expenses,SE,setTab,confirm,userEmail,userNameMap={}}
 /* ══════════════════════════════════════════════════════════════
    CLIENT HISTORY
 ══════════════════════════════════════════════════════════════ */
-function ClientHistory({appts,setTab,tabExtra,userNameMap={}}) {
+function ClientHistory({appts,setTab,tabExtra}) {
   const client   = tabExtra?.client
   const safeAppts= Array.isArray(appts)?appts:[]
   if (!client) { return <div className="card" style={{textAlign:'center',padding:30,color:'var(--t2)'}}>Sin datos de cliente<br/><br/><button className="btn-sm" onClick={()=>setTab('clients')}>← Volver</button></div> }
@@ -1924,7 +1591,6 @@ function ClientHistory({appts,setTab,tabExtra,userNameMap={}}) {
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.serviceNames}</div>
                   {bool(a.domicilio)&&<div style={{fontSize:11,color:'var(--gold)'}}>🛵 Domicilio</div>}
-                  {a.assignedTo&&<div style={{fontSize:11,color:'#B85C6E',marginTop:2}}>👩‍💼 {userNameMap[String(a.assignedTo).trim().toLowerCase()] || String(a.assignedTo).split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</div>}
                 </div>
                 <div style={{textAlign:'right',flexShrink:0}}>
                   <div style={{fontSize:13,fontWeight:700,color:stCfg.col,textDecoration:st==='noshow'?'line-through':''}}>{fmtM(a.totalPrice||a.servicePrice)}</div>
@@ -2181,17 +1847,16 @@ function TopServices({appts,setTab}) {
 function IncomeDetail({appts,setTab,tabExtra}) {
   const initFilter = tabExtra?.filter || 'all'
   const [month,setM] = useState(tabExtra?.month || new Date().toISOString().slice(0,7))
-  const [filter,setF]= useState(initFilter)
+  const [filter,setF]= useState(initFilter) // 'all'|'completed'|'pending'
   const safe   = Array.isArray(appts)?appts:[]
   const months = [...new Set([...safe.map(a=>cleanDate(a.date).slice(0,7)),new Date().toISOString().slice(0,7)].filter(Boolean))].sort((a,b)=>b.localeCompare(a))
   const ma     = [...safe].filter(a=>cleanDate(a.date).slice(0,7)===month).sort((a,b)=>cleanDate(a.date).localeCompare(cleanDate(b.date)))
   const done   = ma.filter(a=>bool(a.completed)&&a.completed!=='noshow')
   const noshow = ma.filter(a=>a.completed==='noshow')
   const pend   = ma.filter(a=>!bool(a.completed)&&a.completed!=='noshow')
-  // "Todo" solo suma lo realmente recibido (completadas)
-  const revDone   = done.reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
-  const revPend   = pend.reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
-  const revNoShow = noshow.reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
+  const revDone= done.reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
+  const revPend= pend.reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
+  const revTotal=ma.reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
 
   const display= filter==='completed'?done : filter==='pending'?pend : filter==='noshow'?noshow : ma
 
@@ -2200,7 +1865,7 @@ function IncomeDetail({appts,setTab,tabExtra}) {
 
   return <>
     <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:18}}>
-      <button className="btn-sm" onClick={()=>setTab(tabExtra?.from||'finances')}>← Volver</button>
+      <button className="btn-sm" onClick={()=>setTab('finances')}>← Volver</button>
       <span style={{fontFamily:'Georgia,serif',fontSize:20,fontWeight:600}}>💚 Detalle Ingresos</span>
     </div>
     <select className="inp" value={month} onChange={e=>setM(e.target.value)} style={{marginBottom:12}}>
@@ -2208,11 +1873,10 @@ function IncomeDetail({appts,setTab,tabExtra}) {
     </select>
 
     <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:7,marginBottom:14}}>
-      {[
-        ['all',      'Recibido',   fmtM(revDone),   done.length,   'var(--green)', '#EDF7F0'],
-        ['completed','Completadas',fmtM(revDone),   done.length,   'var(--green)', '#EDF7F0'],
-        ['pending',  'Pendiente',  fmtM(revPend),   pend.length,   'var(--gold)',  '#FFF8E6'],
-        ['noshow',   'No asistió', fmtM(revNoShow), noshow.length, 'var(--red)',   '#FFF4F0'],
+      {[['all','Todo',fmtM(revTotal),ma.length,'var(--primary)','var(--primary-l)'],
+        ['completed','Recibido',fmtM(revDone),done.length,'var(--green)','#EDF7F0'],
+        ['pending','Pendiente',fmtM(revPend),pend.length,'var(--gold)','#FFF8E6'],
+        ['noshow','No asistió',fmtM(noshow.reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)),noshow.length,'var(--red)','#FFF4F0']
       ].map(([v,l,val,cnt,col,bg])=>(
         <div key={v} onClick={()=>setF(v)} style={{background:filter===v?col:bg,borderRadius:12,padding:'12px 8px',textAlign:'center',cursor:'pointer',border:`2px solid ${filter===v?col:'transparent'}`,transition:'all .15s'}}>
           <div style={{fontSize:11,color:filter===v?'white':col,fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:3}}>{l}</div>
@@ -2228,48 +1892,31 @@ function IncomeDetail({appts,setTab,tabExtra}) {
         <button className="btn-sm" style={{marginLeft:8,whiteSpace:'nowrap'}} onClick={()=>setTab('appointments')}>Ir a citas</button>
       </div>
     )}
-    {filter==='noshow' && noshow.length>0 && revNoShow>0 && (
-      <div style={{background:'#FFF4F0',borderRadius:12,padding:'10px 14px',marginBottom:12,fontSize:13,color:'var(--red)',display:'flex',gap:8,alignItems:'center'}}>
-        <span>😔 <strong>{fmtM(revNoShow)}</strong> que no se recibieron por no asistir</span>
-      </div>
-    )}
 
     {Object.keys(byDay).length===0
-      ?<div className="card" style={{textAlign:'center',padding:30,color:'var(--t2)'}}>{filter==='pending'?'No hay citas pendientes 🎉':filter==='noshow'?'Sin inasistencias este mes 🎉':'Sin citas este mes'}</div>
+      ?<div className="card" style={{textAlign:'center',padding:30,color:'var(--t2)'}}>{filter==='pending'?'No hay citas pendientes 🎉':'Sin citas este mes'}</div>
       :Object.entries(byDay).sort(([a],[b])=>b.localeCompare(a)).map(([day,items])=>{
-        const dayReceived = items.filter(a=>bool(a.completed)&&a.completed!=='noshow').reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
-        const dayNoShow   = items.filter(a=>a.completed==='noshow').reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
-        const dayPend     = items.filter(a=>!bool(a.completed)&&a.completed!=='noshow').reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
+        const dayTot=items.reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
+        const dayDone=items.filter(a=>bool(a.completed)).reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
         return <div className="card" key={day} style={{marginBottom:10}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
             <span style={{fontWeight:700,fontSize:14}}>{fmtDate(day)}</span>
             <div style={{textAlign:'right'}}>
-              {dayReceived>0&&<div style={{fontWeight:700,color:'var(--green)',fontSize:13}}>{fmtM(dayReceived)} recibido</div>}
-              {dayPend>0   &&<div style={{fontSize:11,color:'var(--gold)'}}>({fmtM(dayPend)} pendiente)</div>}
-              {dayNoShow>0 &&<div style={{fontSize:11,color:'var(--red)',textDecoration:'line-through',opacity:.7}}>{fmtM(dayNoShow)}</div>}
+              {filter!=='pending'&&<div style={{fontWeight:700,color:'var(--green)',fontSize:13}}>{fmtM(dayDone)} recibido</div>}
+              {dayTot>dayDone&&filter!=='completed'&&<div style={{fontSize:11,color:'var(--gold)'}}>({fmtM(dayTot-dayDone)} pendiente)</div>}
             </div>
           </div>
-          {items.map(a=>{
-            const isNoShow = a.completed==='noshow'
-            const isDone   = bool(a.completed)&&!isNoShow
-            const precio   = toN(a.totalPrice||a.servicePrice||0)
-            return <div key={a.id} className="row" style={{fontSize:13,opacity:isNoShow?.7:1}}>
-              <div style={{background:isNoShow?'#FFF0F0':'var(--primary-l)',borderRadius:8,padding:'5px 8px',fontWeight:700,color:isNoShow?'var(--red)':'var(--primary)',fontSize:12,flexShrink:0}}>{fmtTime(a.time)}</div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',textDecoration:isNoShow?'line-through':'none',color:isNoShow?'#aaa':'inherit'}}>{a.clientName}</div>
-                <div style={{fontSize:11,color:'var(--t2)'}}>{a.serviceNames}{bool(a.domicilio)?' 🛵':''}</div>
-              </div>
-              <div style={{flexShrink:0,textAlign:'right'}}>
-                {isNoShow ? <>
-                  <div style={{fontWeight:700,color:'#ccc',fontSize:13,textDecoration:'line-through'}}>{fmtM(precio)}</div>
-                  <div style={{fontSize:10,color:'var(--red)',fontWeight:600}}>No asistió</div>
-                </> : <>
-                  <div style={{fontWeight:700,color:isDone?'var(--green)':'var(--gold)',fontSize:13}}>{fmtM(precio)}</div>
-                  <div style={{fontSize:10,color:isDone?'var(--green)':'var(--gold)'}}>{isDone?'✓ Recibido':'Pendiente'}</div>
-                </>}
-              </div>
+          {items.map(a=><div key={a.id} className="row" style={{fontSize:13}}>
+            <div style={{background:'var(--primary-l)',borderRadius:8,padding:'5px 8px',fontWeight:700,color:'var(--primary)',fontSize:12,flexShrink:0}}>{fmtTime(a.time)}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.clientName}</div>
+              <div style={{fontSize:11,color:'var(--t2)'}}>{a.serviceNames}{bool(a.domicilio)?' 🛵':''}</div>
             </div>
-          })}
+            <div style={{flexShrink:0,textAlign:'right'}}>
+              <div style={{fontWeight:700,color:bool(a.completed)?'var(--green)':'var(--gold)',fontSize:13}}>{fmtM(a.totalPrice||a.servicePrice)}</div>
+              <div style={{fontSize:10,color:bool(a.completed)?'var(--green)':'var(--gold)'}}>{bool(a.completed)?'✓ Recibido':'Pendiente'}</div>
+            </div>
+          </div>)}
         </div>
       })
     }
@@ -2279,7 +1926,7 @@ function IncomeDetail({appts,setTab,tabExtra}) {
 /* ══════════════════════════════════════════════════════════════
    EXPENSE DETAIL
 ══════════════════════════════════════════════════════════════ */
-function ExpenseDetail({expenses,SE,setTab,tabExtra,confirm,userNameMap={}}) {
+function ExpenseDetail({expenses,SE,setTab,tabExtra,confirm}) {
   const [month,setM]=useState(tabExtra?.month || new Date().toISOString().slice(0,7))
   const [editId,setEI]=useState(null), [editData,setED]=useState({})
   const safe=Array.isArray(expenses)?expenses:[]
@@ -2295,7 +1942,7 @@ function ExpenseDetail({expenses,SE,setTab,tabExtra,confirm,userNameMap={}}) {
 
   return <>
     <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:18}}>
-      <button className="btn-sm" onClick={()=>setTab(tabExtra?.from||'finances')}>← Volver</button>
+      <button className="btn-sm" onClick={()=>setTab('finances')}>← Volver</button>
       <span style={{fontFamily:'Georgia,serif',fontSize:20,fontWeight:600}}>📤 Detalle Gastos</span>
     </div>
     <select className="inp" value={month} onChange={e=>setM(e.target.value)} style={{marginBottom:14}}>
@@ -2339,14 +1986,14 @@ function ExpenseDetail({expenses,SE,setTab,tabExtra,confirm,userNameMap={}}) {
             return <div key={e.id} style={{padding:'8px 0',borderBottom:'1px solid #FBF0F3'}}>
               {isEdit
                 ?<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                  <div><label className="lbl">Descripción</label><input className="inp" value={editData.description||''} onChange={x=>setED(p=>({...p,description:capFirst(x.target.value)}))}/></div>
+                  <div><label className="lbl">Descripción</label><input className="inp" value={editData.description||''} onChange={x=>setED(p=>({...p,description:x.target.value}))}/></div>
                   <div><label className="lbl">Monto</label><input className="inp" type="number" value={editData.amount||''} onChange={x=>setED(p=>({...p,amount:x.target.value}))}/></div>
                   <div><label className="lbl">Cat.</label><input className="inp" list="cats2-d" value={editData.category||''} onChange={x=>setED(p=>({...p,category:x.target.value}))}/><datalist id="cats2-d">{allCats.map(c=><option key={c} value={c}/>)}</datalist></div>
                   <div><label className="lbl">Fecha</label><input type="date" className="inp" value={editData.date||''} onChange={x=>setED(p=>({...p,date:x.target.value}))}/></div>
                   <div style={{gridColumn:'span 2',display:'flex',gap:8}}><button className="btn" style={{flex:1}} onClick={saveEdit}>Guardar</button><button className="btn-del" onClick={()=>setEI(null)}>Cancelar</button></div>
                 </div>
                 :<div style={{display:'flex',alignItems:'center',gap:8}}>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,fontSize:13}}>{e.description}</div><div style={{fontSize:11,color:'var(--t2)'}}>{e.category}{e.createdBy && <span style={{marginLeft:6,color:'#B85C6E'}}>· {userNameMap[String(e.createdBy).trim().toLowerCase()] || String(e.createdBy).split('@')[0]}</span>}</div></div>
+                  <div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,fontSize:13}}>{e.description}</div><div style={{fontSize:11,color:'var(--t2)'}}>{e.category}</div></div>
                   <span style={{fontWeight:700,color:'var(--red)',fontSize:13,flexShrink:0}}>{fmtM(e.amount)}</span>
                   <button className="btn-edit" onClick={()=>{setEI(e.id);setED({...e})}}>✏️</button>
                   <button className="btn-del" onClick={()=>confirm(`¿Eliminar el gasto "${e.description}"?`,()=>SE(safe.filter(x=>x.id!==e.id)))}>✕</button>
