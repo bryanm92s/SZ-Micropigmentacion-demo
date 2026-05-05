@@ -2160,7 +2160,7 @@ function SettingsTab({clients, appts, expenses, resetAll, themeMode, themePalett
     </div>
   )
 }
-══════════════════════════════════════════════════════════════ */
+/*══════════════════════════════════════════════════════════════ */
 function ExpenseDetail({expenses,SE,setTab,tabExtra,confirm}) {
   const [month,setM]=useState(tabExtra?.month || new Date().toISOString().slice(0,7))
   const [editId,setEI]=useState(null), [editData,setED]=useState({})
