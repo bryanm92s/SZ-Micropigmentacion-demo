@@ -169,6 +169,15 @@ export default function App() {
   const confirm  = (msg, onOk) => setModal({type:'confirm', msg, onOk})
   const infoModal= (msg)       => setModal({type:'info', msg})
 
+  const resetAll = useCallback(async () => {
+    const empty = { clients:[], appointments:[], expenses:[], services:DEFAULT_SERVICES }
+    setC([]); setA([]); setE([]); setS(DEFAULT_SERVICES)
+    try { ['sb_c','sb_a','sb_e','sb_s'].forEach(k=>localStorage.removeItem(k)) } catch {}
+    setSt('saving')
+    try { await saveData(empty); setSt('ok'); setLS(new Date()) }
+    catch(e) { setEM(e.message); setSt('error'); setTimeout(()=>setSt('ok'),5000) }
+  }, [])
+
   const deleteAppt = useCallback(async appt => {
     const next = appts.filter(x=>x.id!==appt.id)
     SA(next)
@@ -176,7 +185,7 @@ export default function App() {
       saveData({action:'deleteCalendarEvent',eventId:appt.calendarEventId}).catch(()=>{})
   }, [appts, SA])
 
-  const p = {clients,services,appts,expenses,SC,SS,SA,SE,sync,deleteAppt,setTab,confirm,infoModal,tabExtra}
+  const p = {clients,services,appts,expenses,SC,SS,SA,SE,sync,deleteAppt,setTab,confirm,infoModal,tabExtra,resetAll}
 
   if (status==='loading') return <Cent><div style={{fontSize:52,animation:'pulse 2s ease-in-out infinite'}}>🌸</div></Cent>
   if (status==='noconfig') return <Cent><div style={{fontSize:36,marginBottom:8}}>⚙️</div><p style={{fontSize:16,fontWeight:600}}>Configura VITE_SCRIPT_URL y VITE_TOKEN en Vercel</p></Cent>
@@ -208,6 +217,7 @@ export default function App() {
           ['clients',    'people', 'Clientes'],
           ['services',   'stars',  'Servicios'],
           ['finances',   'chart',  'Finanzas'],
+          ['settings',   'gear',   'Ajustes'],
         ].map(([id,ic,lb])=>(
           <button key={id} onClick={()=>setTab(id)} className={`nb${tab===id?' act':''}`}
             style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,paddingTop:9,paddingBottom:9,paddingLeft:12,paddingRight:12}}>
@@ -224,6 +234,7 @@ export default function App() {
         {tab==='clients'       && <ClientsTab     {...p}/>}
         {tab==='services'      && <ServicesTab    {...p}/>}
         {tab==='finances'      && <FinancesTab    {...p}/>}
+        {tab==='settings'      && <SettingsTab    {...p}/>}
         {tab==='income-detail' && <IncomeDetail   {...p}/>}
         {tab==='expense-detail'  && <ExpenseDetail  {...p}/>}
         {tab==='client-history'  && <ClientHistory   {...p}/>}
@@ -311,6 +322,12 @@ function NavIcon({type, active}) {
         <rect x="9" y="9" width="4" height="11" rx="1.5" fill={c} opacity={active?1:.8}/>
         <rect x="16" y="5" width="4" height="15" rx="1.5" fill={c}/>
         <line x1="2" y1="20.5" x2="20" y2="20.5" stroke={c} strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    ),
+    gear: (
+      <svg style={s} width="22" height="22" viewBox="0 0 22 22" fill="none">
+        <circle cx="11" cy="11" r="3" stroke={c} strokeWidth="1.8" fill="none"/>
+        <path d="M11 2v2M11 18v2M2 11h2M18 11h2M4.93 4.93l1.41 1.41M15.66 15.66l1.41 1.41M4.93 17.07l1.41-1.41M15.66 6.34l1.41-1.41" stroke={c} strokeWidth="1.8" strokeLinecap="round"/>
       </svg>
     ),
   }
@@ -1924,7 +1941,135 @@ function IncomeDetail({appts,setTab,tabExtra}) {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   EXPENSE DETAIL
+   SETTINGS TAB — Zona de peligro / Reset total
+══════════════════════════════════════════════════════════════ */
+function SettingsTab({clients, appts, expenses, resetAll}) {
+  const [step, setStep] = useState(0) // 0=idle, 1=primera confirmación, 2=segunda confirmación, 3=done
+
+  const totalClients  = Array.isArray(clients) ? clients.length : 0
+  const totalAppts    = Array.isArray(appts)   ? appts.length   : 0
+  const totalExpenses = Array.isArray(expenses)? expenses.length: 0
+
+  const handleReset = async () => {
+    setStep(3)
+    await resetAll()
+  }
+
+  if (step===1) return (
+    <div>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}>
+        <button className="btn-sm" onClick={()=>setStep(0)}>← Volver</button>
+        <span style={{fontFamily:'Georgia,serif',fontSize:20,fontWeight:600}}>Restablecer datos</span>
+      </div>
+      <div style={{background:'#FFF4F0',border:'2px solid #F5B0B0',borderRadius:20,padding:28,textAlign:'center'}}>
+        <div style={{fontSize:52,marginBottom:16}}>⚠️</div>
+        <div style={{fontFamily:'Georgia,serif',fontSize:20,fontWeight:700,color:'var(--red)',marginBottom:12}}>
+          ¿Estás segura?
+        </div>
+        <div style={{fontSize:14,color:'var(--t)',lineHeight:1.7,marginBottom:20}}>
+          Esto eliminará <strong>permanentemente</strong>:<br/>
+          <span style={{color:'var(--red)',fontWeight:700}}>
+            {totalClients} cliente{totalClients!==1?'s':''} · {totalAppts} cita{totalAppts!==1?'s':''} · {totalExpenses} gasto{totalExpenses!==1?'s':''}
+          </span><br/>
+          <span style={{fontSize:12,color:'var(--t2)',marginTop:4,display:'block'}}>Esta acción no se puede deshacer.</span>
+        </div>
+        <div style={{display:'flex',gap:10}}>
+          <button className="btn-o" style={{flex:1}} onClick={()=>setStep(0)}>Cancelar</button>
+          <button onClick={()=>setStep(2)}
+            style={{flex:1,background:'var(--red)',color:'white',border:'none',borderRadius:10,padding:'12px 22px',fontWeight:700,fontSize:15,cursor:'pointer',fontFamily:'inherit'}}>
+            Sí, continuar →
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
+  if (step===2) return (
+    <div>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}>
+        <button className="btn-sm" onClick={()=>setStep(0)}>← Cancelar</button>
+        <span style={{fontFamily:'Georgia,serif',fontSize:20,fontWeight:600}}>Confirmación final</span>
+      </div>
+      <div style={{background:'#FFF0EE',border:'2px solid var(--red)',borderRadius:20,padding:28,textAlign:'center'}}>
+        <div style={{fontSize:52,marginBottom:12}}>🚨</div>
+        <div style={{fontFamily:'Georgia,serif',fontSize:19,fontWeight:700,color:'var(--red)',marginBottom:10}}>
+          Última oportunidad
+        </div>
+        <div style={{fontSize:14,color:'var(--t)',lineHeight:1.7,marginBottom:8}}>
+          Si confirmas, <strong>todos los datos se borrarán</strong> del servidor.<br/>
+          No hay forma de recuperarlos.
+        </div>
+        <div style={{background:'white',borderRadius:12,padding:'12px 16px',marginBottom:20,fontSize:13,color:'var(--t2)',border:'1px solid var(--border)'}}>
+          🗑️ Se eliminarán <strong style={{color:'var(--red)'}}>{totalClients} clientes, {totalAppts} citas y {totalExpenses} gastos</strong>
+        </div>
+        <div style={{display:'flex',gap:10}}>
+          <button className="btn-o" style={{flex:1}} onClick={()=>setStep(0)}>No, cancelar</button>
+          <button onClick={handleReset}
+            style={{flex:1,background:'var(--red)',color:'white',border:'none',borderRadius:10,padding:'12px 10px',fontWeight:700,fontSize:14,cursor:'pointer',fontFamily:'inherit',letterSpacing:'.02em'}}>
+            🗑️ Sí, borrar todo
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
+  if (step===3) return (
+    <div style={{textAlign:'center',padding:'60px 20px'}}>
+      <div style={{fontSize:52,marginBottom:16}}>✅</div>
+      <div style={{fontFamily:'Georgia,serif',fontSize:22,fontWeight:700,marginBottom:10}}>Datos eliminados</div>
+      <div style={{fontSize:14,color:'var(--t2)',marginBottom:24}}>El programa ha sido restablecido.<br/>Puedes empezar desde cero.</div>
+      <button className="btn" onClick={()=>setStep(0)} style={{width:'100%',maxWidth:280}}>Entendido</button>
+    </div>
+  )
+
+  return (
+    <div>
+      <div style={{fontFamily:'Georgia,serif',fontSize:22,fontWeight:600,color:'var(--t)',marginBottom:24}}>⚙️ Ajustes</div>
+
+      {/* Resumen de datos actuales */}
+      <div className="card" style={{marginBottom:16}}>
+        <div style={{fontWeight:700,fontSize:15,marginBottom:14}}>📊 Datos actuales</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+          {[
+            ['👥','Clientes',totalClients,'var(--primary)','var(--primary-l)'],
+            ['📅','Citas',totalAppts,'var(--green)','#EDF7F0'],
+            ['💸','Gastos',totalExpenses,'var(--red)','#FFF0F0'],
+          ].map(([ic,lb,val,col,bg])=>(
+            <div key={lb} style={{background:bg,borderRadius:12,padding:'14px 8px',textAlign:'center'}}>
+              <div style={{fontSize:20,marginBottom:4}}>{ic}</div>
+              <div style={{fontFamily:'Georgia,serif',fontSize:22,fontWeight:700,color:col}}>{val}</div>
+              <div style={{fontSize:11,color:col,fontWeight:600,textTransform:'uppercase',letterSpacing:'.05em',marginTop:2}}>{lb}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Zona de peligro */}
+      <div style={{border:'2px solid #F5B0B0',borderRadius:16,overflow:'hidden'}}>
+        <div style={{background:'#FFF4F0',padding:'14px 18px',borderBottom:'1px solid #F5B0B0'}}>
+          <div style={{fontWeight:700,fontSize:14,color:'var(--red)'}}>🚨 Zona de peligro</div>
+          <div style={{fontSize:12,color:'var(--t2)',marginTop:3}}>Acciones irreversibles — procede con cuidado</div>
+        </div>
+        <div style={{background:'white',padding:'18px'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:14}}>
+            <div>
+              <div style={{fontWeight:700,fontSize:14,color:'var(--t)',marginBottom:3}}>Restablecer todo el programa</div>
+              <div style={{fontSize:12,color:'var(--t2)',lineHeight:1.5}}>
+                Elimina todos los clientes, citas y gastos registrados. Los servicios vuelven a los predeterminados.
+              </div>
+            </div>
+            <button onClick={()=>setStep(1)}
+              style={{background:'#FFF0EE',color:'var(--red)',border:'2px solid #F5B0B0',borderRadius:10,padding:'10px 16px',fontWeight:700,fontSize:13,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0,transition:'all .15s'}}
+              onMouseOver={e=>{e.target.style.background='var(--red)';e.target.style.color='white'}}
+              onMouseOut={e=>{e.target.style.background='#FFF0EE';e.target.style.color='var(--red)'}}>
+              🗑️ Resetear
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 ══════════════════════════════════════════════════════════════ */
 function ExpenseDetail({expenses,SE,setTab,tabExtra,confirm}) {
   const [month,setM]=useState(tabExtra?.month || new Date().toISOString().slice(0,7))
