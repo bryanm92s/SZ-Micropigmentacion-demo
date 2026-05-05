@@ -2005,15 +2005,13 @@ function IncomeDetail({appts,setTab,tabExtra}) {
 ══════════════════════════════════════════════════════════════ */
 function SettingsTab({clients, appts, expenses, resetAll, themeMode, themePalette, setThemeMode, setThemePalette}) {
   const [step, setStep] = useState(0)
+  const [confirmWord, setConfirmWord] = useState('')
 
   const totalClients  = Array.isArray(clients) ? clients.length : 0
   const totalAppts    = Array.isArray(appts)   ? appts.length   : 0
   const totalExpenses = Array.isArray(expenses)? expenses.length: 0
 
-  const handleReset = async () => {
-    setStep(3)
-    await resetAll()
-  }
+  const handleReset = async () => { setStep(3); setConfirmWord(''); await resetAll() }
 
   if (step===1) return (
     <div>
@@ -2044,34 +2042,63 @@ function SettingsTab({clients, appts, expenses, resetAll, themeMode, themePalett
     </div>
   )
 
-  if (step===2) return (
-    <div>
-      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}>
-        <button className="btn-sm" onClick={()=>setStep(0)}>← Cancelar</button>
-        <span style={{fontFamily:'Georgia,serif',fontSize:20,fontWeight:600}}>Confirmación final</span>
+  if (step===2) {
+    const ok = confirmWord.trim() === 'CONFIRMAR'
+    return (
+      <div>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}>
+          <button className="btn-sm" onClick={()=>{setStep(0);setConfirmWord('')}}>← Cancelar</button>
+          <span style={{fontFamily:'Georgia,serif',fontSize:20,fontWeight:600}}>Confirmación final</span>
+        </div>
+        <div style={{background:'var(--red-bg)',border:'2px solid var(--red)',borderRadius:20,padding:28,textAlign:'center'}}>
+          <div style={{fontSize:52,marginBottom:12}}>🚨</div>
+          <div style={{fontFamily:'Georgia,serif',fontSize:19,fontWeight:700,color:'var(--red)',marginBottom:10}}>
+            Última oportunidad
+          </div>
+          <div style={{fontSize:14,color:'var(--t)',lineHeight:1.7,marginBottom:8}}>
+            Si confirmas, <strong>todos los datos se borrarán</strong> del servidor.<br/>
+            No hay forma de recuperarlos.
+          </div>
+          <div style={{background:'var(--surface)',borderRadius:12,padding:'12px 16px',marginBottom:20,fontSize:13,color:'var(--t2)',border:'1px solid var(--border)'}}>
+            🗑️ Se eliminarán <strong style={{color:'var(--red)'}}>{totalClients} clientes, {totalAppts} citas y {totalExpenses} gastos</strong>
+          </div>
+          <div style={{marginBottom:20,textAlign:'left'}}>
+            <label style={{display:'block',fontSize:12,fontWeight:700,color:'var(--t2)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}}>
+              Escribe <span style={{color:'var(--red)',fontFamily:'monospace',fontSize:14}}>CONFIRMAR</span> para continuar
+            </label>
+            <input
+              className="inp"
+              value={confirmWord}
+              onChange={e=>setConfirmWord(e.target.value)}
+              placeholder="CONFIRMAR"
+              autoComplete="off"
+              style={{textAlign:'center',fontWeight:700,fontSize:16,letterSpacing:'.05em',
+                borderColor: confirmWord.length>0 ? (ok?'var(--green)':'var(--red)') : 'var(--border)',
+                color: ok ? 'var(--green)' : 'var(--t)'
+              }}
+            />
+            {confirmWord.length>0 && !ok && (
+              <div style={{fontSize:11,color:'var(--red)',marginTop:5,textAlign:'center'}}>
+                Debe escribir exactamente: CONFIRMAR
+              </div>
+            )}
+            {ok && (
+              <div style={{fontSize:11,color:'var(--green)',marginTop:5,textAlign:'center',fontWeight:700}}>
+                ✓ Confirmación válida
+              </div>
+            )}
+          </div>
+          <div style={{display:'flex',gap:10}}>
+            <button className="btn-o" style={{flex:1}} onClick={()=>{setStep(0);setConfirmWord('')}}>No, cancelar</button>
+            <button onClick={()=>{if(ok)handleReset()}} disabled={!ok}
+              style={{flex:1,background:ok?'var(--red)':'var(--border)',color:ok?'white':'var(--t2)',border:'none',borderRadius:10,padding:'12px 10px',fontWeight:700,fontSize:14,cursor:ok?'pointer':'not-allowed',fontFamily:'inherit',transition:'all .2s'}}>
+              🗑️ Eliminar todo
+            </button>
+          </div>
+        </div>
       </div>
-      <div style={{background:'var(--red-bg)',border:'2px solid var(--red)',borderRadius:20,padding:28,textAlign:'center'}}>
-        <div style={{fontSize:52,marginBottom:12}}>🚨</div>
-        <div style={{fontFamily:'Georgia,serif',fontSize:19,fontWeight:700,color:'var(--red)',marginBottom:10}}>
-          Última oportunidad
-        </div>
-        <div style={{fontSize:14,color:'var(--t)',lineHeight:1.7,marginBottom:8}}>
-          Si confirmas, <strong>todos los datos se borrarán</strong> del servidor.<br/>
-          No hay forma de recuperarlos.
-        </div>
-        <div style={{background:'var(--surface)',borderRadius:12,padding:'12px 16px',marginBottom:20,fontSize:13,color:'var(--t2)',border:'1px solid var(--border)'}}>
-          🗑️ Se eliminarán <strong style={{color:'var(--red)'}}>{totalClients} clientes, {totalAppts} citas y {totalExpenses} gastos</strong>
-        </div>
-        <div style={{display:'flex',gap:10}}>
-          <button className="btn-o" style={{flex:1}} onClick={()=>setStep(0)}>No, cancelar</button>
-          <button onClick={handleReset}
-            style={{flex:1,background:'var(--red)',color:'white',border:'none',borderRadius:10,padding:'12px 10px',fontWeight:700,fontSize:14,cursor:'pointer',fontFamily:'inherit',letterSpacing:'.02em'}}>
-            🗑️ Sí, borrar todo
-          </button>
-        </div>
-      </div>
-    </div>
-  )
+    )
+  }
 
   if (step===3) return (
     <div style={{textAlign:'center',padding:'60px 20px'}}>
