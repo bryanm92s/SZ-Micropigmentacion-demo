@@ -204,7 +204,7 @@ export default function App() {
   const [themeMode,   setThemeMode]   = useState(()=>{ try{return localStorage.getItem('sz_mode')||'light'}catch{return 'light'} })
   const [themePalette,setThemePalette]= useState(()=>{ try{return localStorage.getItem('sz_palette')||'rosa'}catch{return 'rosa'} })
 
-  useEffect(()=>{\
+  useEffect(()=>{
     applyTheme(themePalette, themeMode)
     try{ localStorage.setItem('sz_mode',themeMode); localStorage.setItem('sz_palette',themePalette) }catch{}
   },[themePalette,themeMode])
