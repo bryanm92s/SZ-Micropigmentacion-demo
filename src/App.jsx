@@ -11,6 +11,58 @@ for (let h = 7; h <= 20; h++) {
   if (h < 20) TIME_SLOTS.push(`${String(h).padStart(2,'0')}:30`)
 }
 
+/* ── Theme System ── */
+const PALETTES = [
+  { id:'rosa',    name:'Rosa',    emoji:'🌸', primary:'#B5524A', pd:'#8E3E38', pl:'#FAEAE8', bg:'#F7F0EC', border:'#E8D0CC', t:'#1E0E0C', t2:'#7A5E5A' },
+  { id:'morado',  name:'Morado',  emoji:'💜', primary:'#7C4DBD', pd:'#5D3A8E', pl:'#EDE6F8', bg:'#F4F0FA', border:'#D8CFF0', t:'#1A1228', t2:'#6A5A80' },
+  { id:'azul',    name:'Azul',    emoji:'💙', primary:'#3A6FBD', pd:'#2A5290', pl:'#E6EEF8', bg:'#F0F4FA', border:'#C8D8EE', t:'#0E1A2C', t2:'#5A6A80' },
+  { id:'verde',   name:'Verde',   emoji:'💚', primary:'#2E7D52', pd:'#1F5C3C', pl:'#E6F5EC', bg:'#F0F8F4', border:'#C0E0CC', t:'#0A1E14', t2:'#4A7060' },
+  { id:'dorado',  name:'Dorado',  emoji:'✨', primary:'#A07820', pd:'#785A14', pl:'#FAF4E0', bg:'#FAF6EE', border:'#E8DEB8', t:'#1E1A0C', t2:'#7A7040' },
+  { id:'fucsia',  name:'Fucsia',  emoji:'🌺', primary:'#C04A82', pd:'#903060', pl:'#FCE6F2', bg:'#FDF0F8', border:'#ECC8DF', t:'#1E0C18', t2:'#7A5070' },
+]
+const applyTheme = (pid, mode) => {
+  const p = PALETTES.find(x=>x.id===pid)||PALETTES[0]
+  const r = document.documentElement.style
+  if (mode==='dark') {
+    r.setProperty('--primary',   p.primary)
+    r.setProperty('--primary-d', p.pd)
+    r.setProperty('--primary-l', p.pd+'55')
+    r.setProperty('--bg',        '#131013')
+    r.setProperty('--card',      '#1E1A1D')
+    r.setProperty('--surface',   '#271E25')
+    r.setProperty('--border',    '#3A2C36')
+    r.setProperty('--t',         '#F0E8EC')
+    r.setProperty('--t2',        '#A08898')
+    r.setProperty('--green',     '#4ABA80')
+    r.setProperty('--green-bg',  '#0B2A1A')
+    r.setProperty('--gold',      '#D4AA40')
+    r.setProperty('--gold-bg',   '#2A2200')
+    r.setProperty('--red',       '#E06060')
+    r.setProperty('--red-bg',    '#2A0E0E')
+    r.setProperty('--warn-bg',   '#2A2000')
+    r.setProperty('--warn-t',    '#F0C060')
+    r.setProperty('--input-bg',  '#271E25')
+  } else {
+    r.setProperty('--primary',   p.primary)
+    r.setProperty('--primary-d', p.pd)
+    r.setProperty('--primary-l', p.pl)
+    r.setProperty('--bg',        p.bg)
+    r.setProperty('--card',      '#FFFFFF')
+    r.setProperty('--surface',   '#FFFFFF')
+    r.setProperty('--border',    p.border)
+    r.setProperty('--t',         p.t)
+    r.setProperty('--t2',        p.t2)
+    r.setProperty('--green',     '#2E7D52')
+    r.setProperty('--green-bg',  '#EDF7F0')
+    r.setProperty('--gold',      '#C49A1A')
+    r.setProperty('--gold-bg',   '#FFF8E6')
+    r.setProperty('--red',       '#B03030')
+    r.setProperty('--red-bg',    '#FFF0F0')
+    r.setProperty('--warn-bg',   '#FFF4DC')
+    r.setProperty('--warn-t',    '#7A5000')
+    r.setProperty('--input-bg',  '#FFFFFF')
+  }
+}
 const DEF_CATS   = ['Insumos','Arriendo','Publicidad','Servicios','Transporte','Otros']
 const CAT_COLORS = ['#C4827A','#7A9FC4','#82C494','#C4A87A','#A47AC4','#C4C47A','#7AC4C4','#C47AA4']
 
@@ -149,7 +201,13 @@ export default function App() {
     })
   }, [])
 
-  useEffect(() => { refresh() }, [])
+  const [themeMode,   setThemeMode]   = useState(()=>{ try{return localStorage.getItem('sz_mode')||'light'}catch{return 'light'} })
+  const [themePalette,setThemePalette]= useState(()=>{ try{return localStorage.getItem('sz_palette')||'rosa'}catch{return 'rosa'} })
+
+  useEffect(()=>{
+    applyTheme(themePalette, themeMode)
+    try{ localStorage.setItem('sz_mode',themeMode); localStorage.setItem('sz_palette',themePalette) }catch{}
+  },[themePalette,themeMode])
   useEffect(() => { const i=setInterval(()=>refresh(true),2*60*1000); return()=>clearInterval(i) }, [refresh])
 
   const sync = useCallback(async (payload, setter, value) => {
@@ -185,7 +243,7 @@ export default function App() {
       saveData({action:'deleteCalendarEvent',eventId:appt.calendarEventId}).catch(()=>{})
   }, [appts, SA])
 
-  const p = {clients,services,appts,expenses,SC,SS,SA,SE,sync,deleteAppt,setTab,confirm,infoModal,tabExtra,resetAll}
+  const p = {clients,services,appts,expenses,SC,SS,SA,SE,sync,deleteAppt,setTab,confirm,infoModal,tabExtra,resetAll,themeMode,themePalette,setThemeMode,setThemePalette}
 
   if (status==='loading') return <Cent><div style={{fontSize:52,animation:'pulse 2s ease-in-out infinite'}}>🌸</div></Cent>
   if (status==='noconfig') return <Cent><div style={{fontSize:36,marginBottom:8}}>⚙️</div><p style={{fontSize:16,fontWeight:600}}>Configura VITE_SCRIPT_URL y VITE_TOKEN en Vercel</p></Cent>
@@ -210,7 +268,7 @@ export default function App() {
         </div>
       </header>
 
-      <nav style={{background:'white',borderBottom:'1px solid var(--border)',display:'flex',overflowX:'auto',padding:'0 2px',position:'sticky',top:58,zIndex:99,scrollbarWidth:'none'}}>
+      <nav style={{background:'var(--surface)',borderBottom:'1px solid var(--border)',display:'flex',overflowX:'auto',padding:'0 2px',position:'sticky',top:58,zIndex:99,scrollbarWidth:'none'}}>
         {[
           ['dashboard',  'grid',   'Panel'],
           ['appointments','cal',   'Citas'],
@@ -242,7 +300,7 @@ export default function App() {
         {tab==='top-services'    && <TopServices     {...p}/>}
       </main>
 
-      <footer style={{textAlign:'center',padding:'20px 14px 28px',borderTop:'1px solid var(--border)',marginTop:8,background:'white'}}>
+      <footer style={{textAlign:'center',padding:'20px 14px 28px',borderTop:'1px solid var(--border)',marginTop:8,background:'var(--surface)'}}>
         <span style={{fontSize:11,color:'var(--t2)',letterSpacing:'.03em',display:'inline-flex',alignItems:'center',gap:6,flexWrap:'wrap',justifyContent:'center'}}>
           <span>SZ Micropigmentación</span>
           <span style={{color:'var(--border)'}}>|</span>
@@ -262,7 +320,7 @@ export default function App() {
 function Modal({msg, onOk, onCancel, okLabel='Eliminar', cancelLabel='Cancelar'}) {
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-      <div style={{background:'white',borderRadius:20,padding:28,maxWidth:340,width:'100%',textAlign:'center',boxShadow:'0 20px 60px rgba(0,0,0,0.2)'}}>
+      <div style={{background:'var(--surface)',borderRadius:20,padding:28,maxWidth:340,width:'100%',textAlign:'center',boxShadow:'0 20px 60px rgba(0,0,0,0.2)'}}>
         <div style={{fontSize:36,marginBottom:12}}>⚠️</div>
         <div style={{fontSize:15,fontWeight:600,color:'var(--t)',marginBottom:18,lineHeight:1.5}}>{msg}</div>
         <div style={{display:'flex',gap:10,justifyContent:'center'}}>
@@ -350,45 +408,46 @@ function GS() { return <style>{`
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap');
   :root{
     --primary:#B5524A;--primary-d:#8E3E38;--primary-l:#FAEAE8;
-    --bg:#F7F0EC;--card:#FFFFFF;--border:#E8D0CC;
-    --t:#1E0E0C;--t2:#7A5E5A;--gold:#C49A1A;
-    --green:#2E7D52;--red:#B03030;
-    --warn-bg:#FFF4DC;--warn-t:#7A5000;
+    --bg:#F7F0EC;--card:#FFFFFF;--surface:#FFFFFF;--border:#E8D0CC;
+    --t:#1E0E0C;--t2:#7A5E5A;--gold:#C49A1A;--gold-bg:#FFF8E6;
+    --green:#2E7D52;--green-bg:#EDF7F0;--red:#B03030;--red-bg:#FFF0F0;
+    --warn-bg:#FFF4DC;--warn-t:#7A5000;--input-bg:#FFFFFF;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{-webkit-tap-highlight-color:transparent}
+  body{-webkit-tap-highlight-color:transparent;background:var(--bg)}
+  select,option{background:var(--input-bg)!important;color:var(--t)!important}
   .nb{background:none;border:none;border-bottom:2.5px solid transparent;padding:11px 12px;font-size:13px;font-weight:500;cursor:pointer;color:var(--t2);white-space:nowrap;font-family:inherit;transition:all .15s;flex-shrink:0}
   .nb.act{color:var(--primary);border-bottom-color:var(--primary);font-weight:700}
   .card{background:var(--card);border-radius:16px;border:1px solid var(--border);padding:18px;margin-bottom:12px}
-  .inp{width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;color:var(--t);background:white;outline:none;font-family:inherit;transition:border-color .15s;-webkit-appearance:none}
+  .inp{width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;color:var(--t);background:var(--input-bg);outline:none;font-family:inherit;transition:border-color .15s;-webkit-appearance:none}
   .inp:focus{border-color:var(--primary)}
   .lbl{display:block;font-size:11px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px}
   .btn{background:var(--primary);color:white;border:none;border-radius:10px;padding:12px 22px;font-weight:600;font-size:15px;cursor:pointer;font-family:inherit;transition:background .15s}
   .btn:active{background:var(--primary-d)}.btn:disabled{opacity:.4;cursor:not-allowed}
-  .btn-o{background:white;color:var(--primary);border:1.5px solid var(--primary);border-radius:10px;padding:10px 18px;font-weight:600;font-size:14px;cursor:pointer;font-family:inherit}
+  .btn-o{background:var(--surface);color:var(--primary);border:1.5px solid var(--primary);border-radius:10px;padding:10px 18px;font-weight:600;font-size:14px;cursor:pointer;font-family:inherit}
   .btn-sm{background:var(--primary-l);color:var(--primary);border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
-  .btn-del{background:#FFF0F0;color:var(--red);border:none;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+  .btn-del{background:var(--red-bg);color:var(--red);border:none;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
   .btn-del:active{background:var(--red);color:white}
   .btn-wa{background:#25D366;color:white;border:none;border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
-  .btn-edit{background:#F0EFF8;color:#6060B0;border:none;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
-  .btn-check{background:white;border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
-  .btn-check.done{background:#EDF7F0;border-color:var(--green);color:var(--green)}
+  .btn-edit{background:var(--primary-l);color:var(--primary);border:none;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+  .btn-check{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s;color:var(--t)}
+  .btn-check.done{background:var(--green-bg);border-color:var(--green);color:var(--green)}
   .tag{display:inline-block;background:var(--primary-l);color:var(--primary);border-radius:20px;padding:2px 10px;font-size:12px;font-weight:600}
-  .tag-g{display:inline-block;background:#EDF7F0;color:var(--green);border-radius:20px;padding:2px 10px;font-size:12px;font-weight:600}
-  .tag-gold{display:inline-block;background:#FFF5E6;color:var(--gold);border-radius:20px;padding:2px 10px;font-size:12px;font-weight:600}
-  .tag-past{display:inline-block;background:#EEE8E6;color:#8A7A78;border-radius:20px;padding:2px 10px;font-size:12px;font-weight:600}
-  .row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #FBF0F3}
+  .tag-g{display:inline-block;background:var(--green-bg);color:var(--green);border-radius:20px;padding:2px 10px;font-size:12px;font-weight:600}
+  .tag-gold{display:inline-block;background:var(--gold-bg);color:var(--gold);border-radius:20px;padding:2px 10px;font-size:12px;font-weight:600}
+  .tag-past{display:inline-block;background:var(--border);color:var(--t2);border-radius:20px;padding:2px 10px;font-size:12px;font-weight:600}
+  .row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border)}
   .row:last-child{border-bottom:none}
   .stat{background:var(--card);border-radius:14px;border:1px solid var(--border);padding:16px 12px;text-align:center;cursor:pointer;transition:transform .15s,box-shadow .15s}
-  .stat:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(196,130,122,0.15)}
-  .to{background:white;border:1.5px solid var(--border);border-radius:9px;padding:8px 2px;font-size:11px;font-weight:600;cursor:pointer;text-align:center;font-family:inherit;transition:all .12s;color:var(--t);line-height:1.2}
+  .stat:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,0.12)}
+  .to{background:var(--surface);border:1.5px solid var(--border);border-radius:9px;padding:8px 2px;font-size:11px;font-weight:600;cursor:pointer;text-align:center;font-family:inherit;transition:all .12s;color:var(--t);line-height:1.2}
   .to:hover:not(:disabled){border-color:var(--primary);color:var(--primary)}
   .to.sel{background:var(--primary);border-color:var(--primary);color:white}
-  .to:disabled{background:#f8f8f8;border-color:#e8e8e8;color:#ccc;cursor:not-allowed}
-  .so{background:white;border:1.5px solid var(--border);border-radius:12px;padding:13px 15px;cursor:pointer;text-align:left;width:100%;font-family:inherit;transition:all .12s;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+  .to:disabled{background:var(--border);border-color:var(--border);color:var(--t2);opacity:.5;cursor:not-allowed}
+  .so{background:var(--surface);border:1.5px solid var(--border);border-radius:12px;padding:13px 15px;cursor:pointer;text-align:left;width:100%;font-family:inherit;transition:all .12s;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;color:var(--t)}
   .so.sel{border-color:var(--primary);background:var(--primary-l)}
-  .warn-box{background:var(--warn-bg);border:1px solid #F0D870;border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:var(--warn-t)}
-  .sugg-item{padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-size:14px;transition:background .12s}
+  .warn-box{background:var(--warn-bg);border:1px solid var(--gold);border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:var(--warn-t)}
+  .sugg-item{padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-size:14px;transition:background .12s;color:var(--t);background:var(--surface)}
   .sugg-item:last-child{border-bottom:none}
   .sugg-item:hover{background:var(--primary-l)}
   nav::-webkit-scrollbar{display:none}
@@ -486,21 +545,21 @@ function Dashboard({clients,appts,expenses,setTab}) {
       </div>
 
       {isMonth&&(
-        <div style={{padding:'10px 16px 0',background:'white'}}>
+        <div style={{padding:'10px 16px 0',background:'var(--surface)'}}>
           <select value={selMonth} onChange={e=>setSelMonth(e.target.value)}
-            style={{width:'100%',border:'1.5px solid var(--border)',borderRadius:8,padding:'7px 12px',fontSize:13,fontFamily:'inherit',color:'var(--t)',background:'white',outline:'none',cursor:'pointer'}}>
+            style={{width:'100%',border:'1.5px solid var(--border)',borderRadius:8,padding:'7px 12px',fontSize:13,fontFamily:'inherit',color:'var(--t)',background:'var(--surface)',outline:'none',cursor:'pointer'}}>
             {months.map(m=><option key={m} value={m}>{new Date(m+'-01T12:00:00').toLocaleDateString('es-CO',{month:'long',year:'numeric'})}</option>)}
           </select>
         </div>
       )}
 
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,padding:'14px 16px'}}>
-        <div style={{textAlign:'center',background:'#EDF7F0',borderRadius:12,padding:'11px 6px',cursor:'pointer'}} onClick={()=>setTab('income-detail', isMonth?{month:selMonth,origin:'dashboard'}:{origin:'dashboard'})}>
+        <div style={{textAlign:'center',background:'var(--green-bg)',borderRadius:12,padding:'11px 6px',cursor:'pointer'}} onClick={()=>setTab('income-detail', isMonth?{month:selMonth,origin:'dashboard'}:{origin:'dashboard'})}>
           <div style={{fontSize:10,color:'var(--green)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:3}}>Recibido</div>
           <div style={{fontFamily:'Georgia,serif',fontSize:14,fontWeight:700,color:'var(--green)'}}>{fmtM(aRevDone)}</div>
           <div style={{fontSize:10,color:'var(--green)',marginTop:2}}>{aDone.length} citas</div>
         </div>
-        <div style={{textAlign:'center',background:'#FFF8E6',borderRadius:12,padding:'11px 6px',cursor:'pointer'}} onClick={()=>setTab('income-detail', isMonth?{filter:'pending',month:selMonth,origin:'dashboard'}:{filter:'pending',origin:'dashboard'})}>
+        <div style={{textAlign:'center',background:'var(--gold-bg)',borderRadius:12,padding:'11px 6px',cursor:'pointer'}} onClick={()=>setTab('income-detail', isMonth?{filter:'pending',month:selMonth,origin:'dashboard'}:{filter:'pending',origin:'dashboard'})}>
           <div style={{fontSize:10,color:'var(--gold)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:3}}>Pendiente</div>
           <div style={{fontFamily:'Georgia,serif',fontSize:14,fontWeight:700,color:'var(--gold)'}}>{fmtM(aRevPend)}</div>
           <div style={{fontSize:10,color:'var(--gold)',marginTop:2}}>{aPend.length} {'\u2192'}</div>
@@ -567,7 +626,7 @@ function MonthlyIncomeState({appts,selMonth,setSelMonth,setTab}) {
           {'\uD83D\uDCCA'} Estado de ingresos por mes
         </span>
         <select value={selMonth} onChange={e=>setSelMonth(e.target.value)}
-          style={{border:'1.5px solid var(--border)',borderRadius:8,padding:'4px 10px',fontSize:12,fontFamily:'inherit',color:'var(--t)',background:'white',outline:'none',cursor:'pointer'}}>
+          style={{border:'1.5px solid var(--border)',borderRadius:8,padding:'4px 10px',fontSize:12,fontFamily:'inherit',color:'var(--t)',background:'var(--surface)',outline:'none',cursor:'pointer'}}>
           {months.map(m=><option key={m} value={m}>{new Date(m+'-01T12:00:00').toLocaleDateString('es-CO',{month:'short',year:'numeric'})}</option>)}
         </select>
       </div>
@@ -575,12 +634,12 @@ function MonthlyIncomeState({appts,selMonth,setSelMonth,setTab}) {
         {label}
       </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:10}}>
-        <div style={{textAlign:'center',background:'#EDF7F0',borderRadius:12,padding:'12px 8px',cursor:'pointer'}} onClick={()=>setTab('income-detail',{month:selMonth})}>
+        <div style={{textAlign:'center',background:'var(--green-bg)',borderRadius:12,padding:'12px 8px',cursor:'pointer'}} onClick={()=>setTab('income-detail',{month:selMonth})}>
           <div style={{fontSize:10,color:'var(--green)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:3}}>Recibido</div>
           <div style={{fontFamily:'Georgia,serif',fontSize:15,fontWeight:700,color:'var(--green)'}}>{fmtM(revDone)}</div>
           <div style={{fontSize:10,color:'var(--green)',marginTop:2}}>{done.length} citas {'\u2713'}</div>
         </div>
-        <div style={{textAlign:'center',background:'#FFF8E6',borderRadius:12,padding:'12px 8px',cursor:'pointer'}} onClick={()=>setTab('income-detail',{filter:'pending',month:selMonth})}>
+        <div style={{textAlign:'center',background:'var(--gold-bg)',borderRadius:12,padding:'12px 8px',cursor:'pointer'}} onClick={()=>setTab('income-detail',{filter:'pending',month:selMonth})}>
           <div style={{fontSize:10,color:'var(--gold)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:3}}>Pendiente</div>
           <div style={{fontFamily:'Georgia,serif',fontSize:15,fontWeight:700,color:'var(--gold)'}}>{fmtM(revPend)}</div>
           <div style={{fontSize:10,color:'var(--gold)',marginTop:2}}>{pend.length} citas {'\u2192'}</div>
@@ -633,7 +692,7 @@ function MonthlyBalance({appts,expenses,selMonth,setSelMonth,setTab}) {
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
         <span style={{fontWeight:700,fontSize:14,color:'var(--t)'}}>📅 Balance por mes</span>
         <select value={selMonth} onChange={e=>setSelMonth(e.target.value)}
-          style={{border:'1.5px solid var(--border)',borderRadius:8,padding:'4px 10px',fontSize:12,fontFamily:'inherit',color:'var(--t)',background:'white',outline:'none',cursor:'pointer'}}>
+          style={{border:'1.5px solid var(--border)',borderRadius:8,padding:'4px 10px',fontSize:12,fontFamily:'inherit',color:'var(--t)',background:'var(--surface)',outline:'none',cursor:'pointer'}}>
           {months.map(m=><option key={m} value={m}>{new Date(m+'-01T12:00:00').toLocaleDateString('es-CO',{month:'short',year:'numeric'})}</option>)}
         </select>
       </div>
@@ -649,12 +708,12 @@ function MonthlyBalance({appts,expenses,selMonth,setSelMonth,setTab}) {
 
       {/* 3 pills */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-        <div style={{background:'#EDF7F0',borderRadius:10,padding:'10px 8px',textAlign:'center',cursor:'pointer'}} onClick={()=>setTab('income-detail',{month:selMonth})}>
+        <div style={{background:'var(--green-bg)',borderRadius:10,padding:'10px 8px',textAlign:'center',cursor:'pointer'}} onClick={()=>setTab('income-detail',{month:selMonth})}>
           <div style={{fontSize:10,color:'var(--green)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:3}}>Recibido</div>
           <div style={{fontFamily:'Georgia,serif',fontSize:14,fontWeight:700,color:'var(--green)'}}>{fmtM(revDone)}</div>
           <div style={{fontSize:10,color:'var(--green)',marginTop:1}}>{ma.filter(a=>bool(a.completed)).length} citas</div>
         </div>
-        <div style={{background:'#FFF8E6',borderRadius:10,padding:'10px 8px',textAlign:'center',cursor:'pointer'}} onClick={()=>setTab('income-detail',{filter:'pending',month:selMonth})}>
+        <div style={{background:'var(--gold-bg)',borderRadius:10,padding:'10px 8px',textAlign:'center',cursor:'pointer'}} onClick={()=>setTab('income-detail',{filter:'pending',month:selMonth})}>
           <div style={{fontSize:10,color:'var(--gold)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:3}}>Pendiente</div>
           <div style={{fontFamily:'Georgia,serif',fontSize:14,fontWeight:700,color:'var(--gold)'}}>{fmtM(revPend)}</div>
           <div style={{fontSize:10,color:'var(--gold)',marginTop:1}}>{ma.filter(a=>!bool(a.completed)&&!isPastAppt(a)).length} citas</div>
@@ -769,7 +828,7 @@ function ApptCard({appt,canEdit,onToggle,onEdit,onDelete}) {
   const dom    = bool(appt.domicilio)
   const status = appt.completed==='noshow' ? 'noshow' : bool(appt.completed) ? 'done' : 'pending'
   const past   = isPastAppt(appt)
-  const bgMap  = {done:'#F0FFF8', noshow:'#FFF4F0', pending: past?'#F5F0EE':'white'}
+  const bgMap  = {done:'var(--green-bg)', noshow:'var(--red-bg)', pending: past?'var(--border)':'var(--surface)'}
   const brdMap = {done:'#B0DDC0', noshow:'#F5C0B0', pending: past?'#E0D8D5':'var(--border)'}
   return (
     <div style={{background:bgMap[status],borderRadius:12,border:`1px solid ${brdMap[status]}`,padding:14,marginTop:8}}>
@@ -918,7 +977,7 @@ function EditAppt({appt,services,appts,SA,sync,onClose}) {
       })()}
 
       {/* Domicilio */}
-      <div style={{marginTop:4,background:'#FFFAF0',border:'1.5px solid #F0D898',borderRadius:12,padding:12,marginBottom:14}}>
+      <div style={{marginTop:4,background:'var(--gold-bg)',border:'1.5px solid var(--gold)',borderRadius:12,padding:12,marginBottom:14}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
           <div style={{fontWeight:700,fontSize:14}}>🛵 Domicilio</div>
           <button onClick={()=>setDom(!dom)} style={{background:dom?'var(--primary)':'white',color:dom?'white':'var(--primary)',border:'1.5px solid var(--primary)',borderRadius:20,padding:'5px 14px',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>{dom?'Sí ✓':'No'}</button>
@@ -1148,7 +1207,7 @@ function NewWizard({clients,services,appts,SA,SC,sync,infoModal,onClose}) {
       ))}
 
       {/* Domicilio */}
-      <div style={{marginTop:4,background:'#FFFAF0',border:'1.5px solid #F0D898',borderRadius:12,padding:14}}>
+      <div style={{marginTop:4,background:'var(--gold-bg)',border:'1.5px solid var(--gold)',borderRadius:12,padding:14}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
           <div><div style={{fontWeight:700,fontSize:14}}>🛵 ¿A domicilio?</div><div style={{fontSize:12,color:'var(--t2)',marginTop:1}}>Se suma al total</div></div>
           <button onClick={()=>setDom(!dom)} style={{background:dom?'var(--primary)':'white',color:dom?'white':'var(--primary)',border:'1.5px solid var(--primary)',borderRadius:20,padding:'6px 16px',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',transition:'all .15s'}}>{dom?'Sí ✓':'No'}</button>
@@ -1209,13 +1268,13 @@ function NewWizard({clients,services,appts,SA,SC,sync,infoModal,onClose}) {
     {step===4.5&&!loading&&!done && <div className="card">
       <div style={{fontFamily:'Georgia,serif',fontSize:18,marginBottom:16}}>Confirmar cita</div>
       {[['👤 Cliente',fc?.name],['📱 Teléfono',fc?.phone],['✨ Servicios',selSvcs.map(s=>s.name).join(', ')],['💳 Servicios',fmtM(svcTotal)],...(dom?[['🛵 Domicilio',fmtM(domP)],['📍 Dirección',addr||'—']]:[])]
-        .map(([l,v])=><div key={l} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #FBF0F3',fontSize:14}}><span style={{color:'var(--t2)'}}>{l}</span><span style={{fontWeight:600,maxWidth:'60%',textAlign:'right'}}>{v}</span></div>)
+        .map(([l,v])=><div key={l} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border)',fontSize:14}}><span style={{color:'var(--t2)'}}>{l}</span><span style={{fontWeight:600,maxWidth:'60%',textAlign:'right'}}>{v}</span></div>)
       }
       <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',fontSize:16}}><span style={{fontWeight:700}}>💎 Total</span><span style={{fontWeight:700,color:'var(--primary)',fontSize:18}}>{fmtM(grand)}</span></div>
       {[['📅 Fecha',fmtDate(date)],['🕐 Hora',fmtTime(time)]].map(([l,v])=>(
         <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',fontSize:14}}><span style={{color:'var(--t2)'}}>{l}</span><span style={{fontWeight:600}}>{v}</span></div>
       ))}
-      <div style={{marginTop:12,background:'#EDF7F0',borderRadius:10,padding:10,fontSize:13,color:'var(--green)',marginBottom:16}}>📅 Se creará automáticamente en Google Calendar</div>
+      <div style={{marginTop:12,background:'var(--green-bg)',borderRadius:10,padding:10,fontSize:13,color:'var(--green)',marginBottom:16}}>📅 Se creará automáticamente en Google Calendar</div>
       <div style={{display:'flex',gap:8}}>
         <button className="btn-o" onClick={()=>setStep(4)}>Atrás</button>
         <button className="btn" style={{flex:1}} onClick={confirm}>Confirmar ✓</button>
@@ -1241,7 +1300,7 @@ function NewWizard({clients,services,appts,SA,SC,sync,infoModal,onClose}) {
         <div style={{color:'var(--t2)'}}>{fmtDate(date)} · {fmtTime(time)}</div>
       </div>
       {/* WhatsApp note */}
-      <div style={{background:'#E8F5E9',borderRadius:10,padding:'10px 14px',marginBottom:12,fontSize:12,color:'#2E7D32',textAlign:'left'}}>
+      <div style={{background:'var(--green-bg)',borderRadius:10,padding:'10px 14px',marginBottom:12,fontSize:12,color:'var(--green)',textAlign:'left'}}>
         <strong>💬 Sobre el recordatorio automático:</strong> WhatsApp no permite envíos automáticos desde web. Al dar clic en el botón se abre WhatsApp con el mensaje listo — solo tienes que presionar enviar.
       </div>
       <button className="btn-wa" style={{width:'100%',marginBottom:10}} onClick={()=>openWA(fc?.phone,fc?.name,time,date,selSvcs.map(s=>s.name).join(', '),grand,dom)}>
@@ -1313,7 +1372,7 @@ function ClientsTab({clients,appts,SC,confirm,infoModal,setTab}) {
         :filt.map(c=>{
           const n=(Array.isArray(appts)?appts:[]).filter(a=>(a.clientPhone||'').replace(/\D/g,'')===(c.phone||'').replace(/\D/g,'')).length
           const isEdit=editId===c.id
-          return <div key={c.id||c.phone} style={{padding:'12px 0',borderBottom:'1px solid #FBF0F3'}}>
+          return <div key={c.id||c.phone} style={{padding:'12px 0',borderBottom:'1px solid var(--border)'}}>
             {isEdit
               ?<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
                 <div><label className="lbl">Nombre</label><input className="inp" value={editData.name||''} onChange={x=>setED(p=>({...p,name:x.target.value}))}/></div>
@@ -1421,17 +1480,17 @@ function FinancesTab({appts,expenses,SE,setTab,confirm}) {
       </select>
     </div>
     <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:14}}>
-      <div style={{background:'#EDF7F0',borderRadius:14,padding:'14px 10px',textAlign:'center',cursor:'pointer'}} onClick={()=>setTab('income-detail',{month})}>
+      <div style={{background:'var(--green-bg)',borderRadius:14,padding:'14px 10px',textAlign:'center',cursor:'pointer'}} onClick={()=>setTab('income-detail',{month})}>
         <div style={{fontSize:11,color:'var(--green)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>Recibido</div>
         <div style={{fontFamily:'Georgia,serif',fontSize:15,fontWeight:700,color:'var(--green)'}}>{fmtM(revDone)}</div>
         <div style={{fontSize:10,color:'var(--green)',marginTop:2}}>Ver →</div>
       </div>
-      <div style={{background:'#FFF0F0',borderRadius:14,padding:'14px 10px',textAlign:'center',cursor:'pointer'}} onClick={()=>setTab('expense-detail',{month})}>
+      <div style={{background:'var(--red-bg)',borderRadius:14,padding:'14px 10px',textAlign:'center',cursor:'pointer'}} onClick={()=>setTab('expense-detail',{month})}>
         <div style={{fontSize:11,color:'var(--red)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>Gastos</div>
         <div style={{fontFamily:'Georgia,serif',fontSize:15,fontWeight:700,color:'var(--red)'}}>{fmtM(tot)}</div>
         <div style={{fontSize:10,color:'var(--red)',marginTop:2}}>Ver →</div>
       </div>
-      <div style={{background:revDone-tot>=0?'#EDF7F0':'#FFF0F0',borderRadius:14,padding:'14px 10px',textAlign:'center',border:`1px solid ${revDone-tot>=0?'#B0DDB8':'#F5B0B0'}`}}>
+      <div style={{background:revDone-tot>=0?'var(--green-bg)':'var(--red-bg)',borderRadius:14,padding:'14px 10px',textAlign:'center',border:`1px solid ${revDone-tot>=0?'var(--green)':'var(--red)'}`}}>
         <div style={{fontSize:11,color:revDone-tot>=0?'var(--green)':'var(--red)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>Neto</div>
         <div style={{fontFamily:'Georgia,serif',fontSize:15,fontWeight:700,color:revDone-tot>=0?'var(--green)':'var(--red)'}}>{fmtM(revDone-tot)}</div>
       </div>
@@ -1476,7 +1535,7 @@ function FinancesTab({appts,expenses,SE,setTab,confirm}) {
       <div style={{fontWeight:700,fontSize:15,marginBottom:12}}>📋 Gastos del mes</div>
       {[...me].sort((a,b)=>cleanDate(a.date).localeCompare(cleanDate(b.date))).map(e=>{
         const isEdit=editId===e.id
-        return <div key={e.id} style={{padding:'10px 0',borderBottom:'1px solid #FBF0F3'}}>
+        return <div key={e.id} style={{padding:'10px 0',borderBottom:'1px solid var(--border)'}}>
           {isEdit
             ?<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
               <div><label className="lbl">Descripción</label><input className="inp" value={editData.description||''} onChange={x=>setEData(p=>({...p,description:x.target.value}))}/></div>
@@ -1675,14 +1734,14 @@ function MonthComparison({appts,expenses,setTab}) {
         <div style={{marginBottom:4}}>
           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
             <div style={{width:8,height:8,borderRadius:2,background:colorA,flexShrink:0}}/>
-            <div style={{flex:1,background:'#F0EAE8',borderRadius:4,height:10,overflow:'hidden'}}>
+            <div style={{flex:1,background:'var(--border)',borderRadius:4,height:10,overflow:'hidden'}}>
               <div style={{width:`${wA}%`,height:'100%',background:colorA,borderRadius:4,transition:'width .5s ease'}}/>
             </div>
             <span style={{fontSize:12,fontWeight:700,color:colorA,minWidth:70,textAlign:'right'}}>{fmt(valA)}</span>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <div style={{width:8,height:8,borderRadius:2,background:colorB,opacity:.7,flexShrink:0}}/>
-            <div style={{flex:1,background:'#F0EAE8',borderRadius:4,height:10,overflow:'hidden'}}>
+            <div style={{flex:1,background:'var(--border)',borderRadius:4,height:10,overflow:'hidden'}}>
               <div style={{width:`${wB}%`,height:'100%',background:colorB,borderRadius:4,opacity:.7,transition:'width .5s ease'}}/>
             </div>
             <span style={{fontSize:12,fontWeight:700,color:colorB,opacity:.8,minWidth:70,textAlign:'right'}}>{fmt(valB)}</span>
@@ -1737,7 +1796,7 @@ function MonthComparison({appts,expenses,setTab}) {
           {key:'cardA',m:mA,d:dA,col:'var(--primary)'},
           {key:'cardB',m:mB,d:dB,col:'var(--gold)'},
         ].map(({key,m,d,col})=>(
-          <div key={key} style={{background:'white',borderRadius:14,border:`2px solid ${col}`,padding:'14px 12px'}}>
+          <div key={key} style={{background:'var(--surface)',borderRadius:14,border:`2px solid ${col}`,padding:'14px 12px'}}>
             <div style={{fontSize:10,color:col,fontWeight:700,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6}}>{monthLabel(m)}</div>
             <div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'4px 0',borderBottom:'1px solid var(--border)'}}><span style={{color:'var(--t2)'}}>Recibido</span><span style={{fontWeight:700,color:'var(--green)'}}>{fmtM(d.recv)}</span></div>
             <div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'4px 0',borderBottom:'1px solid var(--border)'}}><span style={{color:'var(--t2)'}}>Gastos</span><span style={{fontWeight:700,color:'var(--red)'}}>{fmtM(d.exp)}</span></div>
@@ -1838,7 +1897,7 @@ function TopServices({appts,setTab}) {
                       <span style={{fontWeight:700,fontSize:14}}>{svc.name}</span>
                     </div>
                     {/* Progress bar */}
-                    <div style={{background:'#F0EAE8',borderRadius:4,height:8,overflow:'hidden',marginBottom:6}}>
+                    <div style={{background:'var(--border)',borderRadius:4,height:8,overflow:'hidden',marginBottom:6}}>
                       <div style={{width:`${barPct}%`,height:'100%',background:color,borderRadius:4,transition:'width .6s ease'}}/>
                     </div>
                     <div style={{display:'flex',gap:14,fontSize:11,color:'var(--t2)'}}>
@@ -1904,7 +1963,7 @@ function IncomeDetail({appts,setTab,tabExtra}) {
     </div>
 
     {filter==='pending' && pend.length>0 && (
-      <div style={{background:'#FFF8E6',borderRadius:12,padding:'10px 14px',marginBottom:12,fontSize:13,color:'var(--warn-t)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+      <div style={{background:'var(--gold-bg)',borderRadius:12,padding:'10px 14px',marginBottom:12,fontSize:13,color:'var(--warn-t)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
         <span>💡 Marca estas citas como <strong>Completadas</strong> para contarlas como recibidas</span>
         <button className="btn-sm" style={{marginLeft:8,whiteSpace:'nowrap'}} onClick={()=>setTab('appointments')}>Ir a citas</button>
       </div>
@@ -1943,8 +2002,8 @@ function IncomeDetail({appts,setTab,tabExtra}) {
 /* ══════════════════════════════════════════════════════════════
    SETTINGS TAB — Zona de peligro / Reset total
 ══════════════════════════════════════════════════════════════ */
-function SettingsTab({clients, appts, expenses, resetAll}) {
-  const [step, setStep] = useState(0) // 0=idle, 1=primera confirmación, 2=segunda confirmación, 3=done
+function SettingsTab({clients, appts, expenses, resetAll, themeMode, themePalette, setThemeMode, setThemePalette}) {
+  const [step, setStep] = useState(0)
 
   const totalClients  = Array.isArray(clients) ? clients.length : 0
   const totalAppts    = Array.isArray(appts)   ? appts.length   : 0
@@ -1961,7 +2020,7 @@ function SettingsTab({clients, appts, expenses, resetAll}) {
         <button className="btn-sm" onClick={()=>setStep(0)}>← Volver</button>
         <span style={{fontFamily:'Georgia,serif',fontSize:20,fontWeight:600}}>Restablecer datos</span>
       </div>
-      <div style={{background:'#FFF4F0',border:'2px solid #F5B0B0',borderRadius:20,padding:28,textAlign:'center'}}>
+      <div style={{background:'var(--red-bg)',border:'2px solid #F5B0B0',borderRadius:20,padding:28,textAlign:'center'}}>
         <div style={{fontSize:52,marginBottom:16}}>⚠️</div>
         <div style={{fontFamily:'Georgia,serif',fontSize:20,fontWeight:700,color:'var(--red)',marginBottom:12}}>
           ¿Estás segura?
@@ -1990,7 +2049,7 @@ function SettingsTab({clients, appts, expenses, resetAll}) {
         <button className="btn-sm" onClick={()=>setStep(0)}>← Cancelar</button>
         <span style={{fontFamily:'Georgia,serif',fontSize:20,fontWeight:600}}>Confirmación final</span>
       </div>
-      <div style={{background:'#FFF0EE',border:'2px solid var(--red)',borderRadius:20,padding:28,textAlign:'center'}}>
+      <div style={{background:'var(--red-bg)',border:'2px solid var(--red)',borderRadius:20,padding:28,textAlign:'center'}}>
         <div style={{fontSize:52,marginBottom:12}}>🚨</div>
         <div style={{fontFamily:'Georgia,serif',fontSize:19,fontWeight:700,color:'var(--red)',marginBottom:10}}>
           Última oportunidad
@@ -1999,7 +2058,7 @@ function SettingsTab({clients, appts, expenses, resetAll}) {
           Si confirmas, <strong>todos los datos se borrarán</strong> del servidor.<br/>
           No hay forma de recuperarlos.
         </div>
-        <div style={{background:'white',borderRadius:12,padding:'12px 16px',marginBottom:20,fontSize:13,color:'var(--t2)',border:'1px solid var(--border)'}}>
+        <div style={{background:'var(--surface)',borderRadius:12,padding:'12px 16px',marginBottom:20,fontSize:13,color:'var(--t2)',border:'1px solid var(--border)'}}>
           🗑️ Se eliminarán <strong style={{color:'var(--red)'}}>{totalClients} clientes, {totalAppts} citas y {totalExpenses} gastos</strong>
         </div>
         <div style={{display:'flex',gap:10}}>
@@ -2021,19 +2080,54 @@ function SettingsTab({clients, appts, expenses, resetAll}) {
       <button className="btn" onClick={()=>setStep(0)} style={{width:'100%',maxWidth:280}}>Entendido</button>
     </div>
   )
-
   return (
     <div>
-      <div style={{fontFamily:'Georgia,serif',fontSize:22,fontWeight:600,color:'var(--t)',marginBottom:24}}>⚙️ Ajustes</div>
+      <div style={{fontFamily:'Georgia,serif',fontSize:22,fontWeight:600,color:'var(--t)',marginBottom:20}}>⚙️ Ajustes</div>
 
-      {/* Resumen de datos actuales */}
-      <div className="card" style={{marginBottom:16}}>
+      {/* ── Modo ── */}
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontWeight:700,fontSize:15,marginBottom:14}}>🌓 Modo de visualización</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          {[['light','☀️','Claro'],['dark','🌙','Oscuro']].map(([val,ic,lb])=>{
+            const sel = themeMode===val
+            return (
+              <button key={val} onClick={()=>setThemeMode(val)}
+                style={{background:sel?'var(--primary)':'var(--surface)',color:sel?'white':'var(--t)',border:`2px solid ${sel?'var(--primary)':'var(--border)'}`,borderRadius:14,padding:'16px 12px',cursor:'pointer',fontFamily:'inherit',fontWeight:700,fontSize:15,transition:'all .2s',display:'flex',flexDirection:'column',alignItems:'center',gap:6}}>
+                <span style={{fontSize:28}}>{ic}</span>
+                <span style={{fontSize:13}}>{lb}</span>
+                {sel && <span style={{fontSize:10,opacity:.85,letterSpacing:'.05em'}}>ACTIVO</span>}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── Paleta ── */}
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{fontWeight:700,fontSize:15,marginBottom:14}}>🎨 Color principal</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10}}>
+          {PALETTES.map(pal=>{
+            const sel = themePalette===pal.id
+            return (
+              <button key={pal.id} onClick={()=>setThemePalette(pal.id)}
+                style={{background:sel?pal.primary:'var(--surface)',border:`2px solid ${sel?pal.primary:'var(--border)'}`,borderRadius:14,padding:'14px 8px',cursor:'pointer',fontFamily:'inherit',transition:'all .2s',display:'flex',flexDirection:'column',alignItems:'center',gap:5}}>
+                <div style={{width:30,height:30,borderRadius:'50%',background:pal.primary,boxShadow:sel?`0 0 0 3px var(--surface), 0 0 0 5px ${pal.primary}`:'none',transition:'all .2s'}}/>
+                <span style={{fontSize:12,fontWeight:700,color:sel?'white':'var(--t)'}}>{pal.emoji} {pal.name}</span>
+                {sel && <span style={{fontSize:9,color:'rgba(255,255,255,0.85)',letterSpacing:'.05em'}}>ACTIVO</span>}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── Datos ── */}
+      <div className="card" style={{marginBottom:12}}>
         <div style={{fontWeight:700,fontSize:15,marginBottom:14}}>📊 Datos actuales</div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
           {[
             ['👥','Clientes',totalClients,'var(--primary)','var(--primary-l)'],
-            ['📅','Citas',totalAppts,'var(--green)','#EDF7F0'],
-            ['💸','Gastos',totalExpenses,'var(--red)','#FFF0F0'],
+            ['📅','Citas',totalAppts,'var(--green)','var(--green-bg)'],
+            ['💸','Gastos',totalExpenses,'var(--red)','var(--red-bg)'],
           ].map(([ic,lb,val,col,bg])=>(
             <div key={lb} style={{background:bg,borderRadius:12,padding:'14px 8px',textAlign:'center'}}>
               <div style={{fontSize:20,marginBottom:4}}>{ic}</div>
@@ -2044,24 +2138,20 @@ function SettingsTab({clients, appts, expenses, resetAll}) {
         </div>
       </div>
 
-      {/* Zona de peligro */}
-      <div style={{border:'2px solid #F5B0B0',borderRadius:16,overflow:'hidden'}}>
-        <div style={{background:'#FFF4F0',padding:'14px 18px',borderBottom:'1px solid #F5B0B0'}}>
+      {/* ── Zona de peligro ── */}
+      <div style={{border:'2px solid var(--red)',borderRadius:16,overflow:'hidden'}}>
+        <div style={{background:'var(--red-bg)',padding:'14px 18px',borderBottom:'1px solid var(--red)'}}>
           <div style={{fontWeight:700,fontSize:14,color:'var(--red)'}}>🚨 Zona de peligro</div>
           <div style={{fontSize:12,color:'var(--t2)',marginTop:3}}>Acciones irreversibles — procede con cuidado</div>
         </div>
-        <div style={{background:'white',padding:'18px'}}>
+        <div style={{background:'var(--card)',padding:'18px'}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:14}}>
             <div>
               <div style={{fontWeight:700,fontSize:14,color:'var(--t)',marginBottom:3}}>Restablecer todo el programa</div>
-              <div style={{fontSize:12,color:'var(--t2)',lineHeight:1.5}}>
-                Elimina todos los clientes, citas y gastos registrados. Los servicios vuelven a los predeterminados.
-              </div>
+              <div style={{fontSize:12,color:'var(--t2)',lineHeight:1.5}}>Elimina todos los clientes, citas y gastos. Los servicios vuelven al inicio.</div>
             </div>
             <button onClick={()=>setStep(1)}
-              style={{background:'#FFF0EE',color:'var(--red)',border:'2px solid #F5B0B0',borderRadius:10,padding:'10px 16px',fontWeight:700,fontSize:13,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0,transition:'all .15s'}}
-              onMouseOver={e=>{e.target.style.background='var(--red)';e.target.style.color='white'}}
-              onMouseOut={e=>{e.target.style.background='#FFF0EE';e.target.style.color='var(--red)'}}>
+              style={{background:'var(--red-bg)',color:'var(--red)',border:'2px solid var(--red)',borderRadius:10,padding:'10px 16px',fontWeight:700,fontSize:13,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',flexShrink:0}}>
               🗑️ Resetear
             </button>
           </div>
@@ -2070,7 +2160,7 @@ function SettingsTab({clients, appts, expenses, resetAll}) {
     </div>
   )
 }
-/*══════════════════════════════════════════════════════════════ */
+══════════════════════════════════════════════════════════════ */
 function ExpenseDetail({expenses,SE,setTab,tabExtra,confirm}) {
   const [month,setM]=useState(tabExtra?.month || new Date().toISOString().slice(0,7))
   const [editId,setEI]=useState(null), [editData,setED]=useState({})
@@ -2110,7 +2200,7 @@ function ExpenseDetail({expenses,SE,setTab,tabExtra,confirm}) {
             </div>
             <span style={{fontWeight:700,color}}>{fmtM(val)}</span>
           </div>
-          <div style={{height:7,background:'#f0e8e6',borderRadius:4,overflow:'hidden'}}>
+          <div style={{height:7,background:'var(--border)',borderRadius:4,overflow:'hidden'}}>
             <div style={{width:`${Math.round((val/tot)*100)}%`,height:'100%',background:color,borderRadius:4,transition:'width .4s ease'}}/>
           </div>
         </div>
@@ -2128,7 +2218,7 @@ function ExpenseDetail({expenses,SE,setTab,tabExtra,confirm}) {
           </div>
           {items.map(e=>{
             const isEdit=editId===e.id
-            return <div key={e.id} style={{padding:'8px 0',borderBottom:'1px solid #FBF0F3'}}>
+            return <div key={e.id} style={{padding:'8px 0',borderBottom:'1px solid var(--border)'}}>
               {isEdit
                 ?<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
                   <div><label className="lbl">Descripción</label><input className="inp" value={editData.description||''} onChange={x=>setED(p=>({...p,description:x.target.value}))}/></div>
