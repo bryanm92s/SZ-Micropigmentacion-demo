@@ -63,6 +63,12 @@ const applyTheme = (pid, mode) => {
     r.setProperty('--input-bg',  '#FFFFFF')
   }
 }
+/* ── Business config — set these in Vercel environment variables ── */
+const BIZ_NAME     = import.meta.env.VITE_BIZ_NAME     || 'Mi Negocio'
+const BIZ_SUBTITLE = import.meta.env.VITE_BIZ_SUBTITLE || ''
+const BIZ_EMOJI    = import.meta.env.VITE_BIZ_EMOJI    || '🌸'
+const BIZ_LOGO     = import.meta.env.VITE_BIZ_LOGO     || ''
+
 const DEF_CATS   = ['Insumos','Arriendo','Publicidad','Servicios','Transporte','Otros']
 const CAT_COLORS = ['#C4827A','#7A9FC4','#82C494','#C4A87A','#A47AC4','#C4C47A','#7AC4C4','#C47AA4']
 
@@ -246,7 +252,7 @@ export default function App() {
 
   const p = {clients,services,appts,expenses,SC,SS,SA,SE,sync,deleteAppt,setTab,confirm,infoModal,tabExtra,resetAll,themeMode,themePalette,setThemeMode,setThemePalette}
 
-  if (status==='loading') return <Cent><div style={{fontSize:52,animation:'pulse 2s ease-in-out infinite'}}>🌸</div></Cent>
+  if (status==='loading') return <Cent><div style={{fontSize:52,animation:'pulse 2s ease-in-out infinite'}}>{BIZ_EMOJI}</div></Cent>
   if (status==='noconfig') return <Cent><div style={{fontSize:36,marginBottom:8}}>⚙️</div><p style={{fontSize:16,fontWeight:600}}>Configura VITE_SCRIPT_URL y VITE_TOKEN en Vercel</p></Cent>
 
   return (
@@ -257,10 +263,13 @@ export default function App() {
 
       <header style={{background:'var(--primary)',padding:'13px 18px',display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,zIndex:100,boxShadow:'0 2px 12px rgba(180,100,100,0.18)'}}>
         <div style={{display:'flex',alignItems:'center',gap:11}}>
-          <div style={{fontSize:26}}>🌸</div>
+          {BIZ_LOGO
+            ? <img src={BIZ_LOGO} alt={BIZ_NAME} style={{height:38,width:'auto',objectFit:'contain',flexShrink:0,filter:'drop-shadow(0 1px 3px rgba(0,0,0,0.2))'}}/>
+            : <div style={{fontSize:26}}>{BIZ_EMOJI}</div>
+          }
           <div>
-            <div style={{fontFamily:'Georgia,serif',fontSize:15,color:'white',fontWeight:700}}>SZ Micropigmentación</div>
-            <div style={{fontSize:9,color:'rgba(255,255,255,0.78)',letterSpacing:'0.14em',textTransform:'uppercase'}}>Micropigmentación</div>
+            <div style={{fontFamily:'Georgia,serif',fontSize:15,color:'white',fontWeight:700}}>{BIZ_NAME}</div>
+            <div style={{fontSize:9,color:'rgba(255,255,255,0.78)',letterSpacing:'0.14em',textTransform:'uppercase'}}>{BIZ_SUBTITLE||BIZ_NAME}</div>
           </div>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -303,7 +312,7 @@ export default function App() {
 
       <footer style={{textAlign:'center',padding:'20px 14px 28px',borderTop:'1px solid var(--border)',marginTop:8,background:'var(--surface)'}}>
         <span style={{fontSize:11,color:'var(--t2)',letterSpacing:'.03em',display:'inline-flex',alignItems:'center',gap:6,flexWrap:'wrap',justifyContent:'center'}}>
-          <span>SZ Micropigmentación</span>
+          <span>{BIZ_NAME}</span>
           <span style={{color:'var(--border)'}}>|</span>
           <span>© {new Date().getFullYear()} Bryan Morales</span>
           <span style={{color:'var(--border)'}}>|</span>
