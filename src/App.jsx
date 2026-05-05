@@ -2186,7 +2186,7 @@ function ExpenseDetail({expenses,SE,setTab,tabExtra,confirm}) {
     <select className="inp" value={month} onChange={e=>setM(e.target.value)} style={{marginBottom:14}}>
       {months.map(m=><option key={m} value={m}>{new Date(m+'-01T12:00:00').toLocaleDateString('es-CO',{month:'long',year:'numeric'})}</option>)}
     </select>
-    <div style={{background:'linear-gradient(135deg,var(--red),#a04040)',borderRadius:14,padding:'16px 18px',marginBottom:14,color:'white',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+    <div style={{background:'linear-gradient(135deg,var(--primary),var(--primary-d))',borderRadius:14,padding:'16px 18px',marginBottom:14,color:'white',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
       <div><div style={{fontSize:11,opacity:.8,textTransform:'uppercase',letterSpacing:'.07em',fontWeight:600}}>Total del mes</div><div style={{fontFamily:'Georgia,serif',fontSize:26,fontWeight:700,marginTop:3}}>{fmtM(tot)}</div></div>
       <div style={{fontSize:32}}>📊</div>
     </div>
