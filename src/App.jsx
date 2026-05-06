@@ -1302,7 +1302,7 @@ function NewWizard({clients,services,appts,SA,SC,sync,infoModal,onClose}) {
     </div>}
 
     {loading && <div className="card" style={{textAlign:'center',padding:40}}>
-      <div style={{fontSize:38,display:'inline-block',animation:'spin 1s linear infinite'}}>🌸</div>
+      <div style={{fontSize:38,display:'inline-block',animation:'spin 1s linear infinite'}}>{BIZ_EMOJI}</div>
       <div style={{fontFamily:'Georgia,serif',fontSize:16,color:'var(--primary)',marginTop:14}}>Guardando y creando evento en Calendar…</div>
     </div>}
 
