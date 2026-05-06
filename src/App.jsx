@@ -322,7 +322,7 @@ export default function App() {
 
       <footer style={{textAlign:'center',padding:'20px 14px 28px',borderTop:'1px solid var(--border)',marginTop:8,background:'var(--surface)'}}>
         <span style={{fontSize:11,color:'var(--t2)',letterSpacing:'.03em',display:'inline-flex',alignItems:'center',gap:6,flexWrap:'wrap',justifyContent:'center'}}>
-          <span>{BIZ_NAME}</span>
+          <span>{BIZ_EMOJI} {BIZ_NAME}</span>
           <span style={{color:'var(--border)'}}>|</span>
           <span>© {new Date().getFullYear()} Bryan Morales</span>
           <span style={{color:'var(--border)'}}>|</span>
