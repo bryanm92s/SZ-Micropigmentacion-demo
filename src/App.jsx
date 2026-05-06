@@ -217,7 +217,7 @@ export default function App() {
 
   useEffect(()=>{
     // Título de la pestaña: emoji + nombre
-    document.title = `${BIZ_EMOJI} ${BIZ_NAME}`
+    document.title = BIZ_NAME
     // Favicon dinámico con el emoji
     const favicon = document.querySelector("link[rel='icon']") || document.createElement('link')
     favicon.rel  = 'icon'
