@@ -225,7 +225,7 @@ export default function App() {
     document.head.appendChild(favicon)
   },[])
   useEffect(() => { refresh() }, [])
-  useEffect(() => { const i=setInterval(()=>refresh(true),2*60*1000); return()=>clearInterval(i) }, [refresh])
+  useEffect(() => { const i=setInterval(()=>refresh(true),30*1000); return()=>clearInterval(i) }, [refresh])
 
   const sync = useCallback(async (payload, setter, value) => {
     if (setter) setter(value)
