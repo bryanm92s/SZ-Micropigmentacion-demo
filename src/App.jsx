@@ -214,6 +214,16 @@ export default function App() {
     applyTheme(themePalette, themeMode)
     try{ localStorage.setItem('sz_mode',themeMode); localStorage.setItem('sz_palette',themePalette) }catch{}
   },[themePalette,themeMode])
+
+  useEffect(()=>{
+    // Título de la pestaña: emoji + nombre
+    document.title = `${BIZ_EMOJI} ${BIZ_NAME}`
+    // Favicon dinámico con el emoji
+    const favicon = document.querySelector("link[rel='icon']") || document.createElement('link')
+    favicon.rel  = 'icon'
+    favicon.href = `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>${BIZ_EMOJI}</text></svg>`
+    document.head.appendChild(favicon)
+  },[])
   useEffect(() => { refresh() }, [])
   useEffect(() => { const i=setInterval(()=>refresh(true),2*60*1000); return()=>clearInterval(i) }, [refresh])
 
