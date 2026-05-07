@@ -225,16 +225,16 @@ export default function App() {
     document.head.appendChild(favicon)
   },[])
   useEffect(() => { refresh() }, [])
-  useEffect(() => { const i=setInterval(()=>refresh(true),30*1000); return()=>clearInterval(i) }, [refresh])
+  useEffect(() => { const i=setInterval(()=>refresh(true),10*1000); return()=>clearInterval(i) }, [refresh])
 
   const sync = useCallback(async (payload, setter, value) => {
     if (setter) setter(value)
     const km={clients:'sb_c',services:'sb_s',appointments:'sb_a',expenses:'sb_e'}
     Object.entries(payload).forEach(([k,v])=>{if(km[k])try{localStorage.setItem(km[k],JSON.stringify(v))}catch{}})
     setSt('saving')
-    try { const r=await saveData(payload); setSt('ok'); setLS(new Date()); return r }
+    try { const r=await saveData(payload); setSt('ok'); setLS(new Date()); refresh(true); return r }
     catch(e) { setEM(e.message); setSt('error'); setTimeout(()=>setSt('ok'),5000); return null }
-  }, [])
+  }, [refresh])
 
   const SC = useCallback((v,x={})=>sync({clients:v,...x},     setC,v),[sync])
   const SS = useCallback((v,x={})=>sync({services:v,...x},    setS,v),[sync])
@@ -256,7 +256,7 @@ export default function App() {
   const deleteAppt = useCallback(async appt => {
     const next = appts.filter(x=>x.id!==appt.id)
     SA(next)
-    if (appt.calendarEventId && bool(appt.calendarCreated))
+    if (appt.calendarEventId)
       saveData({action:'deleteCalendarEvent',eventId:appt.calendarEventId}).catch(()=>{})
   }, [appts, SA])
 
