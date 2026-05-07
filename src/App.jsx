@@ -245,13 +245,18 @@ export default function App() {
   const infoModal= (msg)       => setModal({type:'info', msg})
 
   const resetAll = useCallback(async () => {
+    // Delete all Google Calendar events before wiping data
+    const calAppts = appts.filter(a => a.calendarEventId)
+    calAppts.forEach(a => {
+      saveData({action:'deleteCalendarEvent',eventId:a.calendarEventId}).catch(()=>{})
+    })
     const empty = { clients:[], appointments:[], expenses:[], services:DEFAULT_SERVICES }
     setC([]); setA([]); setE([]); setS(DEFAULT_SERVICES)
     try { ['sb_c','sb_a','sb_e','sb_s'].forEach(k=>localStorage.removeItem(k)) } catch {}
     setSt('saving')
     try { await saveData(empty); setSt('ok'); setLS(new Date()) }
     catch(e) { setEM(e.message); setSt('error'); setTimeout(()=>setSt('ok'),5000) }
-  }, [])
+  }, [appts])
 
   const deleteAppt = useCallback(async appt => {
     const next = appts.filter(x=>x.id!==appt.id)
@@ -1922,7 +1927,7 @@ function TopServices({appts,setTab}) {
                     </div>
                     <div style={{display:'flex',gap:14,fontSize:11,color:'var(--t2)'}}>
                       <span style={{fontWeight:600}}>{svc.count===1?'1 vez':`${svc.count} veces`}</span>
-                      <span>Promedio: <strong style={{color:'var(--t)'}}>{fmtM(Math.round(avgPrice))}</strong></span>
+                      <span>Total: <strong style={{color:'var(--primary)'}}>{fmtM(Math.round(svc.revenue))}</strong></span>
                     </div>
                   </div>
                 </div>
