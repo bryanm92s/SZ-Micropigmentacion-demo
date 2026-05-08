@@ -1878,12 +1878,45 @@ function TopServices({appts,setTab}) {
     })
   })
 
-  const ranked = Object.values(stats).sort((a,b)=>b.revenue-a.revenue)
-  const totalRev = ranked.reduce((s,x)=>s+x.revenue,0)
-  const maxRev   = ranked[0]?.revenue || 1
+  const byRevenue = Object.values(stats).sort((a,b)=>b.revenue-a.revenue)
+  const byCount   = Object.values(stats).sort((a,b)=>b.count-a.count)
+  const totalRev  = byRevenue.reduce((s,x)=>s+x.revenue,0)
+  const maxRev    = byRevenue[0]?.revenue || 1
+  const maxCount  = byCount[0]?.count || 1
 
-  const MEDALS = ['\uD83E\uDD47','\uD83E\uDD48','\uD83E\uDD49']
-  const COLORS  = ['var(--primary)','var(--gold)','var(--green)','#7A9FC4','#A47AC4','#C47AA4']
+  const MEDALS     = ['🥇','🥈','🥉']
+  const COLORS_REV = ['var(--primary)','var(--gold)','var(--green)','#7A9FC4','#A47AC4','#C47AA4']
+  const COLORS_CNT = ['#E07A5F','#F2CC8F','#81B29A','#7A9FC4','#A47AC4','#C47AA4']
+
+  const RankList = ({items, maxBar, colors, barKey}) => (
+    items.length===0
+      ?<div className="card" style={{textAlign:'center',padding:30,color:'var(--t2)'}}>Sin datos de citas completadas para este período</div>
+      :<div className="card">
+        {items.map((svc,i)=>{
+          const barPct = Math.round((barKey==='revenue'?svc.revenue:svc.count)/maxBar*100)
+          const color  = colors[i%colors.length]
+          return (
+            <div key={svc.name} style={{padding:'14px 0',borderBottom:i<items.length-1?'1px solid var(--border)':'none'}}>
+              <div style={{display:'flex',alignItems:'flex-start',gap:10,marginBottom:8}}>
+                <div style={{fontSize:20,flexShrink:0,lineHeight:1}}>{i<3?MEDALS[i]:<span style={{fontSize:14,fontWeight:700,color:'var(--t2)',minWidth:20,display:'inline-block',textAlign:'center'}}>{i+1}</span>}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{marginBottom:4}}>
+                    <span style={{fontWeight:700,fontSize:14}}>{svc.name}</span>
+                  </div>
+                  <div style={{background:'var(--border)',borderRadius:4,height:8,overflow:'hidden',marginBottom:6}}>
+                    <div style={{width:`${barPct}%`,height:'100%',background:color,borderRadius:4,transition:'width .6s ease'}}/>
+                  </div>
+                  <div style={{display:'flex',gap:14,fontSize:11,color:'var(--t2)'}}>
+                    <span style={{fontWeight:600}}>{svc.count===1?'1 vez':`${svc.count} veces`}</span>
+                    <span>Total: <strong style={{color:'var(--primary)'}}>{fmtM(Math.round(svc.revenue))}</strong></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+  )
 
   return (
     <div>
@@ -1903,47 +1936,30 @@ function TopServices({appts,setTab}) {
       </div>
 
       {/* Total summary */}
-      <div style={{background:'linear-gradient(135deg,var(--primary),var(--primary-d))',borderRadius:14,padding:'14px 18px',marginBottom:14,color:'white',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+      <div style={{background:'linear-gradient(135deg,var(--primary),var(--primary-d))',borderRadius:14,padding:'14px 18px',marginBottom:18,color:'white',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
         <div>
           <div style={{fontSize:10,opacity:.8,textTransform:'uppercase',letterSpacing:'.08em',fontWeight:600,marginBottom:4}}>Total generado</div>
           <div style={{fontFamily:'Georgia,serif',fontSize:24,fontWeight:700}}>{fmtM(totalRev)}</div>
-          <div style={{fontSize:11,opacity:.7,marginTop:2}}>{completedAppts.length} citas completadas · {ranked.length} servicios</div>
+          <div style={{fontSize:11,opacity:.7,marginTop:2}}>{completedAppts.length} citas completadas · {byRevenue.length} servicios</div>
         </div>
         <div style={{fontSize:32}}>✨</div>
       </div>
 
-      {ranked.length===0
-        ?<div className="card" style={{textAlign:'center',padding:30,color:'var(--t2)'}}>Sin datos de citas completadas para este período</div>
-        :<div className="card">
-          {ranked.map((svc,i)=>{
-            const pct     = totalRev>0 ? Math.round(svc.revenue/totalRev*100) : 0
-            const barPct  = Math.round(svc.revenue/maxRev*100)
-            const color   = COLORS[i%COLORS.length]
-            const avgPrice= svc.count>0 ? svc.revenue/svc.count : 0
-            return (
-              <div key={svc.name} style={{padding:'14px 0',borderBottom:i<ranked.length-1?'1px solid var(--border)':'none'}}>
-                <div style={{display:'flex',alignItems:'flex-start',gap:10,marginBottom:8}}>
-                  <div style={{fontSize:20,flexShrink:0,lineHeight:1}}>{i<3?MEDALS[i]:<span style={{fontSize:14,fontWeight:700,color:'var(--t2)',minWidth:20,display:'inline-block',textAlign:'center'}}>{i+1}</span>}</div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{marginBottom:4}}>
-                      <span style={{fontWeight:700,fontSize:14}}>{svc.name}</span>
-                    </div>
-                    {/* Progress bar */}
-                    <div style={{background:'var(--border)',borderRadius:4,height:8,overflow:'hidden',marginBottom:6}}>
-                      <div style={{width:`${barPct}%`,height:'100%',background:color,borderRadius:4,transition:'width .6s ease'}}/>
-                    </div>
-                    <div style={{display:'flex',gap:14,fontSize:11,color:'var(--t2)'}}>
-                      <span style={{fontWeight:600}}>{svc.count===1?'1 vez':`${svc.count} veces`}</span>
-                      <span>Total: <strong style={{color:'var(--primary)'}}>{fmtM(Math.round(svc.revenue))}</strong></span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      }
+      {/* Ranking por ingresos */}
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+        <span style={{fontSize:18}}>💰</span>
+        <span style={{fontWeight:700,fontSize:15}}>Por ingresos</span>
+        <span style={{fontSize:11,color:'var(--t2)',marginLeft:2}}>— los que más dinero dejan</span>
+      </div>
+      <RankList items={byRevenue} maxBar={maxRev}   colors={COLORS_REV} barKey="revenue"/>
 
+      {/* Ranking por frecuencia */}
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,marginTop:22}}>
+        <span style={{fontSize:18}}>🔥</span>
+        <span style={{fontWeight:700,fontSize:15}}>Por demanda</span>
+        <span style={{fontSize:11,color:'var(--t2)',marginLeft:2}}>— los que más te piden</span>
+      </div>
+      <RankList items={byCount} maxBar={maxCount} colors={COLORS_CNT} barKey="count"/>
 
     </div>
   )
