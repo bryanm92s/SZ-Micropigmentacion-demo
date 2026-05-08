@@ -1572,7 +1572,7 @@ function FinancesTab({appts,expenses,SE,setTab,confirm}) {
             <option value="__c">+ Nueva categoría</option>
           </select>
         </div>
-        {customCat&&<div><label className="lbl">Nueva cat.</label><input className="inp" placeholder="Ej: Equipos" value={customCat==='new'?'':customCat} onChange={e=>setCC(e.target.value)}/></div>}
+        {customCat&&<div><label className="lbl">Nueva cat.</label><input className="inp" placeholder="Ej: Equipos" value={customCat==='new'?'':customCat} onChange={e=>{const v=e.target.value;setCC(v?v.charAt(0).toUpperCase()+v.slice(1).toLowerCase():'');}}/></div>}
         <div><label className="lbl">Fecha</label><input type="date" className="inp" value={expDate} onChange={e=>setED(e.target.value)}/></div>
       </div>
       <button className="btn" style={{width:'100%'}} onClick={add} disabled={!desc.trim()||!amount}>Agregar gasto</button>
