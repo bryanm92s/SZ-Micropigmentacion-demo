@@ -69,7 +69,7 @@ const BIZ_SUBTITLE = import.meta.env.VITE_BIZ_SUBTITLE || ''
 const BIZ_EMOJI    = import.meta.env.VITE_BIZ_EMOJI    || '🌸'
 const BIZ_LOGO     = import.meta.env.VITE_BIZ_LOGO     || ''
 
-const DEF_CATS   = ['Insumos','Arriendo','Publicidad','Servicios','Transporte','Otros']
+const DEF_CATS   = ['Insumos','Arriendo','Publicidad','Servicios','Transporte','Gasolina','Otros']
 const CAT_COLORS = ['#C4827A','#7A9FC4','#82C494','#C4A87A','#A47AC4','#C4C47A','#7AC4C4','#C47AA4']
 
 const uid        = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7)
@@ -1485,11 +1485,26 @@ function FinancesTab({appts,expenses,SE,setTab,confirm}) {
   const [desc,setD]=useState(''), [amount,setA]=useState(''), [cat,setC]=useState('Insumos'), [expDate,setED]=useState(todayStr())
   const [editId,setEI]=useState(null), [editData,setEData]=useState({})
   const [customCat,setCC]=useState('')
+  const [hiddenCats,setHC]=useState(()=>{try{return JSON.parse(localStorage.getItem('sz_hcats')||'[]')}catch{return[]}})
+  const [showCatMgr,setSCM]=useState(false)
 
   const safe=Array.isArray(expenses)?expenses:[]
   const safeA=Array.isArray(appts)?appts:[]
   const months=[...new Set([...safeA.map(a=>cleanDate(a.date).slice(0,7)),...safe.map(e=>cleanDate(e.date).slice(0,7)),new Date().toISOString().slice(0,7)].filter(Boolean))].sort((a,b)=>b.localeCompare(a))
-  const allCats=[...new Set([...DEF_CATS,...safe.map(e=>e.category).filter(Boolean)])]
+  const usedCats=safe.map(e=>e.category).filter(Boolean)
+  // All categories: default (minus hidden ones that have NO expenses) + custom from expenses
+  const allCats=[...new Set([...DEF_CATS.filter(c=>!hiddenCats.includes(c)||usedCats.includes(c)),...usedCats])]
+
+  const hideCategory = cat => {
+    const next=[...hiddenCats,cat]
+    setHC(next)
+    try{localStorage.setItem('sz_hcats',JSON.stringify(next))}catch{}
+  }
+  const showCategory = cat => {
+    const next=hiddenCats.filter(c=>c!==cat)
+    setHC(next)
+    try{localStorage.setItem('sz_hcats',JSON.stringify(next))}catch{}
+  }
   const ma=safeA.filter(a=>cleanDate(a.date).slice(0,7)===month)
   const me=safe.filter(e=>cleanDate(e.date).slice(0,7)===month)
   const revDone=ma.filter(a=>bool(a.completed)).reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
@@ -1561,6 +1576,34 @@ function FinancesTab({appts,expenses,SE,setTab,confirm}) {
         <div><label className="lbl">Fecha</label><input type="date" className="inp" value={expDate} onChange={e=>setED(e.target.value)}/></div>
       </div>
       <button className="btn" style={{width:'100%'}} onClick={add} disabled={!desc.trim()||!amount}>Agregar gasto</button>
+
+      {/* Category manager */}
+      <div style={{marginTop:14,borderTop:'1px solid var(--border)',paddingTop:12}}>
+        <button onClick={()=>setSCM(p=>!p)} style={{background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',fontSize:12,color:'var(--t2)',fontWeight:600,padding:0,display:'flex',alignItems:'center',gap:5}}>
+          <span style={{transition:'transform .2s',display:'inline-block',transform:showCatMgr?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
+          Gestionar categorías
+        </button>
+        {showCatMgr&&<div style={{marginTop:10,display:'flex',flexDirection:'column',gap:6}}>
+          {[...new Set([...DEF_CATS,...usedCats])].map(cat=>{
+            const inUse=usedCats.includes(cat)
+            const isHidden=hiddenCats.includes(cat)
+            return (
+              <div key={cat} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'7px 10px',borderRadius:8,background:'var(--bg2)',opacity:isHidden?0.5:1}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{fontSize:13,fontWeight:600}}>{cat}</span>
+                  {inUse&&<span style={{fontSize:10,background:'var(--primary-l)',color:'var(--primary)',borderRadius:10,padding:'1px 7px',fontWeight:600}}>{safe.filter(e=>e.category===cat).length} gasto{safe.filter(e=>e.category===cat).length!==1?'s':''}</span>}
+                </div>
+                {!inUse
+                  ? isHidden
+                    ? <button onClick={()=>showCategory(cat)} style={{border:'1px solid var(--border)',background:'white',borderRadius:6,padding:'3px 10px',fontSize:11,cursor:'pointer',color:'var(--t2)',fontFamily:'inherit'}}>Restaurar</button>
+                    : <button onClick={()=>hideCategory(cat)} style={{border:'1px solid var(--red)',background:'var(--red-bg)',borderRadius:6,padding:'3px 10px',fontSize:11,cursor:'pointer',color:'var(--red)',fontFamily:'inherit'}}>Eliminar</button>
+                  : <span style={{fontSize:11,color:'var(--t2)'}}>En uso</span>
+                }
+              </div>
+            )
+          })}
+        </div>}
+      </div>
     </div>
 
     {me.length>0&&<div className="card">
