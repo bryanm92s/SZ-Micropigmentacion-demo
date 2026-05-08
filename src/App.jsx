@@ -117,23 +117,29 @@ const isPastAppt = a => {
   return false
 }
 
-// Returns available time slots: filters taken + past-today + custom exclude
+// Returns available time slots: blocks overlapping slots (1-h service) + past-today + custom exclude
+const SERVICE_DURATION = 60 // minutes per service
+const toMin = t => { const [h,m] = cleanTime(t).split(':').map(Number); return h*60+m }
+
 const getSlots = (date, takenApptIds, allAppts, excludeId=null) => {
   const now     = new Date()
   const isToday = date === todayStr()
-  const taken   = allAppts
+  // Each booked appointment occupies [start, start+60) minutes
+  const booked  = allAppts
     .filter(a => cleanDate(a.date)===date && a.id!==excludeId)
-    .map(a => cleanTime(a.time))
+    .map(a => toMin(a.time))
 
   return TIME_SLOTS.map(t => {
-    const t2 = cleanTime(t)
-    const isTaken = taken.includes(t2)
-    const isPast  = isToday && (() => {
-      const [h,m] = t2.split(':').map(Number)
+    const slotMin = toMin(t)
+    // Overlap: new appt [slotMin, slotMin+60) vs existing [b, b+60)
+    // They overlap iff slotMin < b+60 AND b < slotMin+60
+    const isOverlap = booked.some(b => slotMin < b+SERVICE_DURATION && b < slotMin+SERVICE_DURATION)
+    const isPast    = isToday && (() => {
+      const [h,m] = cleanTime(t).split(':').map(Number)
       const slot  = new Date(); slot.setHours(h,m,0,0)
       return slot <= now
     })()
-    return { time:t, disabled: isTaken||isPast, reason: isPast?'Hora pasada':'Ocupada' }
+    return { time:t, disabled: isOverlap||isPast, reason: isPast?'Hora pasada':'Ocupada' }
   })
 }
 
