@@ -73,8 +73,9 @@ const DEF_CATS   = ['Insumos','Arriendo','Publicidad','Servicios','Transporte','
 const CAT_COLORS = ['#C4827A','#7A9FC4','#82C494','#C4A87A','#A47AC4','#C4C47A','#7AC4C4','#C47AA4']
 
 const uid        = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7)
-const todayStr   = () => new Date().toISOString().split('T')[0]
-const tomorrowStr= () => { const d=new Date(); d.setDate(d.getDate()+1); return d.toISOString().split('T')[0] }
+const localDateStr= (d=new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+const todayStr   = () => localDateStr()
+const tomorrowStr= () => { const d=new Date(); d.setDate(d.getDate()+1); return localDateStr(d) }
 const toN        = v => { const n=Number(String(v).replace(/[^0-9.-]/g,'')); return isNaN(n)?0:n }
 const capWords   = s => String(s||'').trim().replace(/\b\w/g, c=>c.toUpperCase())
 const capFirst   = s => { const t=String(s||'').trim(); return t ? t.charAt(0).toUpperCase()+t.slice(1) : t }
