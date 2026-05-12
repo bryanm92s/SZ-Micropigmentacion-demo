@@ -75,9 +75,9 @@ const CAT_COLORS = ['#C4827A','#7A9FC4','#82C494','#C4A87A','#A47AC4','#C4C47A',
 const uid        = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7)
 const localDateStr= (d=new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 const todayStr   = () => localDateStr()
-const tomorrowStr  = () => { const d=new Date(); d.setDate(d.getDate()+1); return localDateStr(d) }
-const currentMonth = () => localDateStr().slice(0,7)
+const tomorrowStr= () => { const d=new Date(); d.setDate(d.getDate()+1); return localDateStr(d) }
 const toN        = v => { const n=Number(String(v).replace(/[^0-9.-]/g,'')); return isNaN(n)?0:n }
+const capWords   = s => String(s||'').trim().replace(/\b\w/g, c=>c.toUpperCase())
 const capFirst   = s => { const t=String(s||'').trim(); return t ? t.charAt(0).toUpperCase()+t.slice(1) : t }
 const bool       = v => v===true||v==='true'
 const fmtM       = n => `$${toN(n).toLocaleString('es-CO')}`
@@ -122,7 +122,7 @@ const isPastAppt = a => {
 const SERVICE_DURATION = 60 // minutes per service
 const toMin = t => { const [h,m] = cleanTime(t).split(':').map(Number); return h*60+m }
 
-const getSlots = (date, allAppts, excludeId=null) => {
+const getSlots = (date, takenApptIds, allAppts, excludeId=null) => {
   const now     = new Date()
   const isToday = date === todayStr()
   // Each booked appointment occupies [start, start+60) minutes
@@ -194,7 +194,10 @@ export default function App() {
 
   const setTab = (t, extra=null) => { setTabRaw(t); setTabExtra(extra) }
 
+  const savingRef = { current: false } // useRef-like, stable across renders
+
   const refresh = useCallback((silent=false) => {
+    if (savingRef.current) return  // ← skip if a save is in progress (prevents race condition)
     if (!import.meta.env.VITE_SCRIPT_URL) { setSt('noconfig'); return }
     if (!silent) setSt('loading')
     loadData().then(d => {
@@ -239,9 +242,19 @@ export default function App() {
     const km={clients:'sb_c',services:'sb_s',appointments:'sb_a',expenses:'sb_e'}
     Object.entries(payload).forEach(([k,v])=>{if(km[k])try{localStorage.setItem(km[k],JSON.stringify(v))}catch{}})
     setSt('saving')
-    try { const r=await saveData(payload); setSt('ok'); setLS(new Date()); return r }
-    catch(e) { setEM(e.message); setSt('error'); setTimeout(()=>setSt('ok'),5000); return null }
-  }, [])
+    savingRef.current = true
+    try {
+      const r = await saveData(payload)
+      setSt('ok'); setLS(new Date())
+      savingRef.current = false
+      setTimeout(() => refresh(true), 1500) // wait 1.5s for Sheets to commit before re-reading
+      return r
+    }
+    catch(e) {
+      savingRef.current = false
+      setEM(e.message); setSt('error'); setTimeout(()=>setSt('ok'),5000); return null
+    }
+  }, [refresh])
 
   const SC = useCallback((v,x={})=>sync({clients:v,...x},     setC,v),[sync])
   const SS = useCallback((v,x={})=>sync({services:v,...x},    setS,v),[sync])
@@ -493,7 +506,7 @@ function GS() { return <style>{`
    DASHBOARD
 ══════════════════════════════════════════════════════════════ */
 function Dashboard({clients,appts,expenses,setTab}) {
-  const [selMonth, setSelMonth] = useState(currentMonth)
+  const [selMonth, setSelMonth] = useState(()=>new Date().toISOString().slice(0,7))
   const [finTab,   setFinTab]   = useState('general')
   const td = todayStr()
   const ta = [...appts].filter(a=>cleanDate(a.date)===td).sort((a,b)=>cleanTime(a.time).localeCompare(cleanTime(b.time)))
@@ -509,7 +522,7 @@ function Dashboard({clients,appts,expenses,setTab}) {
   const gExp     = safeE.reduce((s,e)=>s+toN(e.amount||0),0)
   const gNeto    = gRevDone - gExp
 
-  const months   = [...new Set([...safeA.map(a=>cleanDate(a.date).slice(0,7)),...safeE.map(e=>cleanDate(e.date).slice(0,7)),currentMonth()].filter(Boolean))].sort((a,b)=>b.localeCompare(a))
+  const months   = [...new Set([...safeA.map(a=>cleanDate(a.date).slice(0,7)),...safeE.map(e=>cleanDate(e.date).slice(0,7)),new Date().toISOString().slice(0,7)].filter(Boolean))].sort((a,b)=>b.localeCompare(a))
   const mA       = safeA.filter(a=>cleanDate(a.date).slice(0,7)===selMonth)
   const mE       = safeE.filter(e=>cleanDate(e.date).slice(0,7)===selMonth)
   const mDone    = mA.filter(a=>bool(a.completed))
@@ -635,8 +648,138 @@ function Dashboard({clients,appts,expenses,setTab}) {
 
 /* ══════════════════════════════════════════════════════════════
    MONTHLY INCOME STATE (Dashboard widget)
+══════════════════════════════════════════════════════════════ */
+function MonthlyIncomeState({appts,selMonth,setSelMonth,setTab}) {
+  const safe   = Array.isArray(appts)?appts:[]
+  const months = [...new Set([
+    ...safe.map(a=>cleanDate(a.date).slice(0,7)),
+    new Date().toISOString().slice(0,7),
+  ].filter(Boolean))].sort((a,b)=>b.localeCompare(a))
+
+  const ma       = safe.filter(a=>cleanDate(a.date).slice(0,7)===selMonth)
+  const done     = ma.filter(a=>bool(a.completed))
+  const pend     = ma.filter(a=>!bool(a.completed)&&!isPastAppt(a))
+  const revDone  = done.reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
+  const revPend  = pend.reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
+  const revTotal = ma.reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
+  const label    = new Date(selMonth+'-01T12:00:00').toLocaleDateString('es-CO',{month:'long',year:'numeric'})
+
+  return (
+    <div className="card" style={{marginBottom:14}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <span style={{fontWeight:700,fontSize:14}}>
+          {'\uD83D\uDCCA'} Estado de ingresos por mes
+        </span>
+        <select value={selMonth} onChange={e=>setSelMonth(e.target.value)}
+          style={{border:'1.5px solid var(--border)',borderRadius:8,padding:'4px 10px',fontSize:12,fontFamily:'inherit',color:'var(--t)',background:'var(--surface)',outline:'none',cursor:'pointer'}}>
+          {months.map(m=><option key={m} value={m}>{new Date(m+'-01T12:00:00').toLocaleDateString('es-CO',{month:'short',year:'numeric'})}</option>)}
+        </select>
+      </div>
+      <div style={{fontSize:11,color:'var(--t2)',marginBottom:10}}>
+        {label}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:10}}>
+        <div style={{textAlign:'center',background:'var(--green-bg)',borderRadius:12,padding:'12px 8px',cursor:'pointer'}} onClick={()=>setTab('income-detail',{month:selMonth})}>
+          <div style={{fontSize:10,color:'var(--green)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:3}}>Recibido</div>
+          <div style={{fontFamily:'Georgia,serif',fontSize:15,fontWeight:700,color:'var(--green)'}}>{fmtM(revDone)}</div>
+          <div style={{fontSize:10,color:'var(--green)',marginTop:2}}>{done.length} citas {'\u2713'}</div>
+        </div>
+        <div style={{textAlign:'center',background:'var(--gold-bg)',borderRadius:12,padding:'12px 8px',cursor:'pointer'}} onClick={()=>setTab('income-detail',{filter:'pending',month:selMonth})}>
+          <div style={{fontSize:10,color:'var(--gold)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:3}}>Pendiente</div>
+          <div style={{fontFamily:'Georgia,serif',fontSize:15,fontWeight:700,color:'var(--gold)'}}>{fmtM(revPend)}</div>
+          <div style={{fontSize:10,color:'var(--gold)',marginTop:2}}>{pend.length} citas {'\u2192'}</div>
+        </div>
+        <div style={{textAlign:'center',background:'var(--primary-l)',borderRadius:12,padding:'12px 8px'}}>
+          <div style={{fontSize:10,color:'var(--primary)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:3}}>Proyectado</div>
+          <div style={{fontFamily:'Georgia,serif',fontSize:15,fontWeight:700,color:'var(--primary)'}}>{fmtM(revTotal)}</div>
+          <div style={{fontSize:10,color:'var(--primary)',marginTop:2}}>{ma.length} citas</div>
+        </div>
+      </div>
+      {revTotal>revDone && (
+        <div style={{fontSize:12,color:'var(--t2)',background:'var(--bg)',borderRadius:10,padding:'8px 12px',lineHeight:1.5}}>
+          {'\uD83D\uDCA1'} Has recibido <strong>{fmtM(revDone)}</strong> de <strong>{fmtM(revTotal)}</strong> proyectados. Te faltan <strong style={{color:'var(--gold)'}}>{fmtM(revTotal-revDone)}</strong>.
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ══════════════════════════════════════════════════════════════
    MONTHLY BALANCE CARD (Dashboard widget)
+══════════════════════════════════════════════════════════════ */
+function MonthlyBalance({appts,expenses,selMonth,setSelMonth,setTab}) {
+  const safeA = Array.isArray(appts)?appts:[]
+  const safeE = Array.isArray(expenses)?expenses:[]
+
+  // Build list of months that have data
+  const months = [...new Set([
+    ...safeA.map(a=>cleanDate(a.date).slice(0,7)),
+    ...safeE.map(e=>cleanDate(e.date).slice(0,7)),
+    new Date().toISOString().slice(0,7),
+  ].filter(Boolean))].sort((a,b)=>b.localeCompare(a))
+
+  const ma = safeA.filter(a=>cleanDate(a.date).slice(0,7)===selMonth)
+  const me = safeE.filter(e=>cleanDate(e.date).slice(0,7)===selMonth)
+
+  const revDone  = ma.filter(a=>bool(a.completed)).reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
+  const revPend  = ma.filter(a=>!bool(a.completed)&&!isPastAppt(a)).reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
+  const revTotal = ma.reduce((s,a)=>s+toN(a.totalPrice||a.servicePrice||0),0)
+  const gastos   = me.reduce((s,e)=>s+toN(e.amount||0),0)
+  const neto     = revDone - gastos
+  const netoPos  = neto >= 0
+
+  const monthLabel = months.includes(selMonth)
+    ? new Date(selMonth+'-01T12:00:00').toLocaleDateString('es-CO',{month:'long',year:'numeric'})
+    : selMonth
+
+  return (
+    <div className="card" style={{marginBottom:14,background:'linear-gradient(160deg,#FBF0EE,#FAF5F0)',border:'1.5px solid var(--border)'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <span style={{fontWeight:700,fontSize:14,color:'var(--t)'}}>📅 Balance por mes</span>
+        <select value={selMonth} onChange={e=>setSelMonth(e.target.value)}
+          style={{border:'1.5px solid var(--border)',borderRadius:8,padding:'4px 10px',fontSize:12,fontFamily:'inherit',color:'var(--t)',background:'var(--surface)',outline:'none',cursor:'pointer'}}>
+          {months.map(m=><option key={m} value={m}>{new Date(m+'-01T12:00:00').toLocaleDateString('es-CO',{month:'short',year:'numeric'})}</option>)}
+        </select>
+      </div>
+
+      {/* Net headline */}
+      <div style={{background:netoPos?'linear-gradient(135deg,var(--green),#3d7a55)':'linear-gradient(135deg,var(--red),#a04040)',borderRadius:12,padding:'12px 16px',marginBottom:12,color:'white',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div>
+          <div style={{fontSize:10,opacity:.8,textTransform:'uppercase',letterSpacing:'.08em',fontWeight:600}}>Neto {monthLabel}</div>
+          <div style={{fontFamily:'Georgia,serif',fontSize:24,fontWeight:700,marginTop:2}}>{fmtM(neto)}</div>
+        </div>
+        <div style={{fontSize:28,opacity:.85}}>{netoPos?'💚':'📉'}</div>
+      </div>
+
+      {/* 3 pills */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+        <div style={{background:'var(--green-bg)',borderRadius:10,padding:'10px 8px',textAlign:'center',cursor:'pointer'}} onClick={()=>setTab('income-detail',{month:selMonth})}>
+          <div style={{fontSize:10,color:'var(--green)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:3}}>Recibido</div>
+          <div style={{fontFamily:'Georgia,serif',fontSize:14,fontWeight:700,color:'var(--green)'}}>{fmtM(revDone)}</div>
+          <div style={{fontSize:10,color:'var(--green)',marginTop:1}}>{ma.filter(a=>bool(a.completed)).length} citas</div>
+        </div>
+        <div style={{background:'var(--gold-bg)',borderRadius:10,padding:'10px 8px',textAlign:'center',cursor:'pointer'}} onClick={()=>setTab('income-detail',{filter:'pending',month:selMonth})}>
+          <div style={{fontSize:10,color:'var(--gold)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:3}}>Pendiente</div>
+          <div style={{fontFamily:'Georgia,serif',fontSize:14,fontWeight:700,color:'var(--gold)'}}>{fmtM(revPend)}</div>
+          <div style={{fontSize:10,color:'var(--gold)',marginTop:1}}>{ma.filter(a=>!bool(a.completed)&&!isPastAppt(a)).length} citas</div>
+        </div>
+        <div style={{background:'var(--primary-l)',borderRadius:10,padding:'10px 8px',textAlign:'center'}}>
+          <div style={{fontSize:10,color:'var(--primary)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:3}}>Proyectado</div>
+          <div style={{fontFamily:'Georgia,serif',fontSize:14,fontWeight:700,color:'var(--primary)'}}>{fmtM(revTotal)}</div>
+          <div style={{fontSize:10,color:'var(--primary)',marginTop:1}}>{ma.length} citas</div>
+        </div>
+      </div>
+
+      {gastos>0 && (
+        <div style={{marginTop:10,display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:12,color:'var(--t2)',paddingTop:10,borderTop:'1px solid var(--border)'}}>
+          <span>Gastos del mes</span>
+          <span style={{fontWeight:700,color:'var(--red)',cursor:'pointer'}} onClick={()=>setTab('expense-detail',{month:selMonth})}>{fmtM(gastos)} Ver →</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ══════════════════════════════════════════════════════════════
    APPOINTMENTS TAB — Fixed accordion (independent toggle)
 ══════════════════════════════════════════════════════════════ */
@@ -812,7 +955,7 @@ function EditAppt({appt,services,appts,SA,sync,onClose}) {
   const [loading, setL]     = useState(false)
   const [result,  setR]     = useState(null)
 
-  const slots    = getSlots(date, appts, appt.id)
+  const slots    = getSlots(date, [], appts, appt.id)
   const toggleSvc= id => setSvcIds(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id])
   const selSvcs  = safeSvcs.filter(s=>svcIds.includes(s.id))
   // Price: original price for pre-existing services, current price for newly added
@@ -996,7 +1139,7 @@ function NewWizard({clients,services,appts,SA,SC,sync,infoModal,onClose}) {
   const selSvcs   = (Array.isArray(services)?services:[]).filter(s=>svcIds.includes(s.id))
   const svcTotal  = selSvcs.reduce((s,x)=>s+toN(x.price),0)
   const grand     = svcTotal+(dom?toN(domP):0)
-  const slots     = getSlots(date, appts)
+  const slots     = getSlots(date,[],appts)
 
   const confirm = async () => {
     setL(true)
@@ -1351,7 +1494,7 @@ function ServicesTab({services,SS,confirm}) {
    FINANCES TAB
 ══════════════════════════════════════════════════════════════ */
 function FinancesTab({appts,expenses,SE,setTab,confirm}) {
-  const [month,setM]=useState(currentMonth)
+  const [month,setM]=useState(new Date().toISOString().slice(0,7))
   const [desc,setD]=useState(''), [amount,setA]=useState(''), [cat,setC]=useState('Insumos'), [expDate,setED]=useState(todayStr())
   const [editId,setEI]=useState(null), [editData,setEData]=useState({})
   const [customCat,setCC]=useState('')
@@ -1360,7 +1503,7 @@ function FinancesTab({appts,expenses,SE,setTab,confirm}) {
 
   const safe=Array.isArray(expenses)?expenses:[]
   const safeA=Array.isArray(appts)?appts:[]
-  const months=[...new Set([...safeA.map(a=>cleanDate(a.date).slice(0,7)),...safe.map(e=>cleanDate(e.date).slice(0,7)),currentMonth()].filter(Boolean))].sort((a,b)=>b.localeCompare(a))
+  const months=[...new Set([...safeA.map(a=>cleanDate(a.date).slice(0,7)),...safe.map(e=>cleanDate(e.date).slice(0,7)),new Date().toISOString().slice(0,7)].filter(Boolean))].sort((a,b)=>b.localeCompare(a))
   const usedCats=safe.map(e=>e.category).filter(Boolean)
   // All categories: default (minus hidden ones that have NO expenses) + custom from expenses
   const allCats=[...new Set([...DEF_CATS.filter(c=>!hiddenCats.includes(c)||usedCats.includes(c)),...usedCats])]
@@ -1636,10 +1779,10 @@ function MonthComparison({appts,expenses,setTab}) {
   const allMonths = [...new Set([
     ...safeA.map(a=>cleanDate(a.date).slice(0,7)),
     ...safeE.map(e=>cleanDate(e.date).slice(0,7)),
-    currentMonth(),
+    new Date().toISOString().slice(0,7),
   ].filter(Boolean))].sort((a,b)=>b.localeCompare(a))
 
-  const now  = currentMonth()
+  const now  = new Date().toISOString().slice(0,7)
   const prev = allMonths.find(m=>m<now) || allMonths[1] || now
 
   const [mA, setMA] = useState(now)
@@ -1767,8 +1910,8 @@ function TopServices({appts,setTab}) {
   const now = new Date()
   const cutoff = {
     all:  null,
-    '3m': localDateStr(new Date(now.getFullYear(), now.getMonth()-2, 1)).slice(0,7),
-    '6m': localDateStr(new Date(now.getFullYear(), now.getMonth()-5, 1)).slice(0,7),
+    '3m': new Date(now.getFullYear(), now.getMonth()-2, 1).toISOString().slice(0,7),
+    '6m': new Date(now.getFullYear(), now.getMonth()-5, 1).toISOString().slice(0,7),
     year: `${now.getFullYear()}-01`,
   }[period]
 
@@ -1883,10 +2026,10 @@ function TopServices({appts,setTab}) {
 ══════════════════════════════════════════════════════════════ */
 function IncomeDetail({appts,setTab,tabExtra}) {
   const initFilter = tabExtra?.filter || 'all'
-  const [month,setM] = useState(tabExtra?.month || currentMonth())
+  const [month,setM] = useState(tabExtra?.month || new Date().toISOString().slice(0,7))
   const [filter,setF]= useState(initFilter) // 'all'|'completed'|'pending'
   const safe   = Array.isArray(appts)?appts:[]
-  const months = [...new Set([...safe.map(a=>cleanDate(a.date).slice(0,7)),currentMonth()].filter(Boolean))].sort((a,b)=>b.localeCompare(a))
+  const months = [...new Set([...safe.map(a=>cleanDate(a.date).slice(0,7)),new Date().toISOString().slice(0,7)].filter(Boolean))].sort((a,b)=>b.localeCompare(a))
   const ma     = [...safe].filter(a=>cleanDate(a.date).slice(0,7)===month).sort((a,b)=>cleanDate(a.date).localeCompare(cleanDate(b.date)))
   const done   = ma.filter(a=>bool(a.completed)&&a.completed!=='noshow')
   const noshow = ma.filter(a=>a.completed==='noshow')
@@ -2152,10 +2295,10 @@ function SettingsTab({clients, appts, expenses, resetAll, themeMode, themePalett
    EXPENSE DETAIL
 ══════════════════════════════════════════════════════════════ */
 function ExpenseDetail({expenses,SE,setTab,tabExtra,confirm}) {
-  const [month,setM]=useState(tabExtra?.month || currentMonth())
+  const [month,setM]=useState(tabExtra?.month || new Date().toISOString().slice(0,7))
   const [editId,setEI]=useState(null), [editData,setED]=useState({})
   const safe=Array.isArray(expenses)?expenses:[]
-  const months=[...new Set([...safe.map(e=>cleanDate(e.date).slice(0,7)),currentMonth()].filter(Boolean))].sort((a,b)=>b.localeCompare(a))
+  const months=[...new Set([...safe.map(e=>cleanDate(e.date).slice(0,7)),new Date().toISOString().slice(0,7)].filter(Boolean))].sort((a,b)=>b.localeCompare(a))
   const me=[...safe].filter(e=>cleanDate(e.date).slice(0,7)===month).sort((a,b)=>cleanDate(a.date).localeCompare(cleanDate(b.date)))
   const tot=me.reduce((s,e)=>s+toN(e.amount||0),0)
   const allCats=[...new Set([...DEF_CATS,...safe.map(e=>e.category).filter(Boolean)])]
