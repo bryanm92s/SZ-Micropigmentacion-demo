@@ -1025,7 +1025,10 @@ function EditAppt({appt,services,appts,SA,sync,onClose}) {
           <div style={{textAlign:'right',flexShrink:0}}>
             <span style={{fontWeight:700,color:'var(--primary)',fontSize:14}}>{fmtM(getPriceFor(s.id))}</span>
             {originalIds.includes(s.id) && savedPrices[s.id] !== undefined && toN(savedPrices[s.id]) !== toN(s.price) &&
-              <div style={{fontSize:10,color:'var(--t2)',textDecoration:'line-through',marginTop:1}}>{fmtM(s.price)} actual</div>}
+              <div style={{marginTop:2,textAlign:'right'}}>
+                <span style={{fontSize:10,color:'var(--t2)',textDecoration:'line-through'}}>{fmtM(toN(s.price))}</span>
+                <span style={{fontSize:10,color:'var(--t2)',marginLeft:3}}>nuevo</span>
+              </div>}
           </div>
         </button>
       ))}
