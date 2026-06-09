@@ -321,6 +321,7 @@ export default function App() {
           ['services',   'stars',  'Servicios'],
           ['finances',   'chart',  'Finanzas'],
           ['settings',   'gear',   'Ajustes'],
+          ['calendar', 'cal', 'Calendario'],
         ].map(([id,ic,lb])=>(
           <button key={id} onClick={()=>setTab(id)} className={`nb${tab===id?' act':''}`}
             style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,paddingTop:9,paddingBottom:9,paddingLeft:12,paddingRight:12}}>
@@ -338,6 +339,7 @@ export default function App() {
         {tab==='services'      && <ServicesTab    {...p}/>}
         {tab==='finances'      && <FinancesTab    {...p}/>}
         {tab==='settings'      && <SettingsTab    {...p}/>}
+        {tab === 'calendar' && <CalendarView {...p} />}
         {tab==='income-detail' && <IncomeDetail   {...p}/>}
         {tab==='expense-detail'  && <ExpenseDetail  {...p}/>}
         {tab==='client-history'  && <ClientHistory   {...p}/>}
@@ -2373,4 +2375,463 @@ function ExpenseDetail({expenses,SE,setTab,tabExtra,confirm}) {
       })
     }
   </>
+  )
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CALENDAR VIEW
+══════════════════════════════════════════════════════════════ */
+function CalendarView({ clients, appts, setTab, confirm, deleteAppt }) {
+  const today = new Date()
+  const [curYear,  setCurYear]  = useState(today.getFullYear())
+  const [curMonth, setCurMonth] = useState(today.getMonth()) // 0-indexed
+  const [selDay,   setSelDay]   = useState(null)             // 'YYYY-MM-DD' or null
+  const [view,     setView]     = useState('month')          // 'month' | 'week'
+
+  const safeA = Array.isArray(appts) ? appts : []
+
+  /* ── Navigation ── */
+  const goBack = () => {
+    if (view === 'week') {
+      // go back 7 days from selDay or today
+      const base = selDay ? new Date(selDay + 'T12:00:00') : new Date()
+      base.setDate(base.getDate() - 7)
+      const s = localDateStr(base)
+      setSelDay(s); setCurYear(base.getFullYear()); setCurMonth(base.getMonth())
+      return
+    }
+    const d = new Date(curYear, curMonth - 1, 1)
+    setCurYear(d.getFullYear()); setCurMonth(d.getMonth())
+    setSelDay(null)
+  }
+  const goFwd = () => {
+    if (view === 'week') {
+      const base = selDay ? new Date(selDay + 'T12:00:00') : new Date()
+      base.setDate(base.getDate() + 7)
+      const s = localDateStr(base)
+      setSelDay(s); setCurYear(base.getFullYear()); setCurMonth(base.getMonth())
+      return
+    }
+    const d = new Date(curYear, curMonth + 1, 1)
+    setCurYear(d.getFullYear()); setCurMonth(d.getMonth())
+    setSelDay(null)
+  }
+  const goToday = () => {
+    const now = new Date()
+    setCurYear(now.getFullYear()); setCurMonth(now.getMonth())
+    setSelDay(todayStr())
+  }
+
+  /* ── Build calendar grid (6 weeks × 7 days) ── */
+  const firstOfMonth = new Date(curYear, curMonth, 1)
+  const startDow     = firstOfMonth.getDay() // 0=Sun
+  const daysInMonth  = new Date(curYear, curMonth + 1, 0).getDate()
+  // Start grid on Sunday before the 1st
+  const gridStart    = new Date(firstOfMonth)
+  gridStart.setDate(1 - startDow)
+
+  const weeks = []
+  for (let w = 0; w < 6; w++) {
+    const days = []
+    for (let d = 0; d < 7; d++) {
+      const cell = new Date(gridStart)
+      cell.setDate(gridStart.getDate() + w * 7 + d)
+      days.push(localDateStr(cell))
+    }
+    weeks.push(days)
+  }
+
+  /* ── Build week grid ── */
+  const weekBase = selDay ? new Date(selDay + 'T12:00:00') : new Date()
+  const weekDow  = weekBase.getDay()
+  const weekStart = new Date(weekBase)
+  weekStart.setDate(weekBase.getDate() - weekDow)
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart); d.setDate(weekStart.getDate() + i)
+    return localDateStr(d)
+  })
+
+  /* ── Appointments indexed by date ── */
+  const apptsByDate = {}
+  safeA.forEach(a => {
+    const d = cleanDate(a.date); if (!d) return
+    if (!apptsByDate[d]) apptsByDate[d] = []
+    apptsByDate[d].push(a)
+  })
+  const sortAppts = arr =>
+    [...arr].sort((a, b) => cleanTime(a.time).localeCompare(cleanTime(b.time)))
+
+  /* ── Selected day appointments ── */
+  const selAppts = selDay ? sortAppts(apptsByDate[selDay] || []) : []
+
+  /* ── Month label ── */
+  const monthLabel = new Date(curYear, curMonth, 1)
+    .toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })
+
+  const todStr = todayStr()
+
+  /* ── Status dot colors ── */
+  const dotColor = a => {
+    if (bool(a.completed)) return 'var(--green)'
+    if (a.completed === 'noshow') return 'var(--red)'
+    if (isPastAppt(a)) return 'var(--t2)'
+    return 'var(--primary)'
+  }
+
+  /* ── Dot chips for a day ── */
+  const DayDots = ({ dateStr }) => {
+    const arr = apptsByDate[dateStr]
+    if (!arr?.length) return null
+    const max = 4
+    return (
+      <div style={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap', marginTop: 2 }}>
+        {arr.slice(0, max).map((a, i) => (
+          <div key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: dotColor(a), flexShrink: 0 }} />
+        ))}
+        {arr.length > max && (
+          <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--t2)', flexShrink: 0 }} />
+        )}
+      </div>
+    )
+  }
+
+  /* ── Appointment pill (week view) ── */
+  const ApptPill = ({ a }) => {
+    const done   = bool(a.completed)
+    const noshow = a.completed === 'noshow'
+    const past   = isPastAppt(a)
+    const bg     = done ? 'var(--green-bg)' : noshow ? 'var(--red-bg)' : past ? 'var(--bg)' : 'var(--primary-l)'
+    const col    = done ? 'var(--green)' : noshow ? 'var(--red)' : past ? 'var(--t2)' : 'var(--primary)'
+    return (
+      <div style={{
+        background: bg, border: `1.5px solid ${col}`, borderRadius: 8,
+        padding: '5px 8px', marginBottom: 4, cursor: 'pointer',
+        transition: 'transform .12s', opacity: noshow ? 0.7 : 1,
+      }}
+        onClick={() => setSelDay(cleanDate(a.date))}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontWeight: 700, fontSize: 11, color: col }}>{fmtTime(a.time)}</span>
+          {done && <span style={{ fontSize: 9, fontWeight: 700, color: col }}>✓</span>}
+          {noshow && <span style={{ fontSize: 9, fontWeight: 700, color: col }}>✗</span>}
+        </div>
+        <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--t)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.clientName}</div>
+        <div style={{ fontSize: 10, color: 'var(--t2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.serviceNames}</div>
+      </div>
+    )
+  }
+
+  /* ── Appointment detail card ── */
+  const ApptCard = ({ a }) => {
+    const done   = bool(a.completed)
+    const noshow = a.completed === 'noshow'
+    const past   = isPastAppt(a)
+    const status = done ? { label: 'Completada', color: 'var(--green)', bg: 'var(--green-bg)' }
+      : noshow ? { label: 'No asistió', color: 'var(--red)', bg: 'var(--red-bg)' }
+      : past    ? { label: 'Pasada', color: 'var(--t2)', bg: 'var(--border)' }
+      :           { label: 'Pendiente', color: 'var(--gold)', bg: 'var(--gold-bg)' }
+    return (
+      <div style={{
+        background: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: 14,
+        padding: '14px', marginBottom: 10, transition: 'box-shadow .15s',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          {/* Time badge */}
+          <div style={{
+            background: 'var(--primary-l)', borderRadius: 10, padding: '8px 10px',
+            textAlign: 'center', minWidth: 58, flexShrink: 0,
+          }}>
+            <div style={{ fontWeight: 700, color: 'var(--primary)', fontSize: 13 }}>{fmtTime(a.time)}</div>
+            {a.isDomicilio && <div style={{ fontSize: 9, color: 'var(--primary)', marginTop: 2, fontWeight: 600 }}>🛵 Dom</div>}
+          </div>
+
+          {/* Info */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--t)' }}>{a.clientName}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: status.color, background: status.bg, borderRadius: 6, padding: '2px 7px' }}>{status.label}</span>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--t2)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.serviceNames}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)', marginTop: 5 }}>{fmtM(a.totalPrice || a.servicePrice)}</div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+          <button className="btn-sm" style={{ flex: 1 }}
+            onClick={() => setTab('appointments')}>
+            ✏️ Editar
+          </button>
+          <button className="btn-sm" style={{ flex: 1 }}
+            onClick={() => {
+              const phone = clients.find(c => c.id === a.clientId)?.phone || ''
+              if (phone) openWA(phone, a.clientName, a.time, a.date, a.serviceNames, a.totalPrice || a.servicePrice, a.isDomicilio)
+            }}>
+            💬 WhatsApp
+          </button>
+          <button className="btn-del"
+            onClick={() => confirm(`¿Eliminar la cita de ${a.clientName}?`, () => deleteAppt(a))}>
+            ✕
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  /* ── Summary stats strip ── */
+  const stripMonth = safeA.filter(a => cleanDate(a.date).slice(0, 7) === `${curYear}-${String(curMonth + 1).padStart(2, '0')}`)
+  const stripDone  = stripMonth.filter(a => bool(a.completed)).length
+  const stripPend  = stripMonth.filter(a => !bool(a.completed) && a.completed !== 'noshow' && !isPastAppt(a)).length
+  const stripNS    = stripMonth.filter(a => a.completed === 'noshow').length
+  const stripRev   = stripMonth.filter(a => bool(a.completed)).reduce((s, a) => s + toN(a.totalPrice || a.servicePrice || 0), 0)
+
+  /* ═══════════════════════════════════════════════════
+     RENDER
+  ═══════════════════════════════════════════════════ */
+  return (
+    <>
+      {/* ── Header ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ fontFamily: 'Georgia,serif', fontSize: 21, fontWeight: 600, color: 'var(--t)' }}>
+          📅 Calendario
+        </div>
+        <button className="btn" style={{ fontSize: 12, padding: '7px 14px' }}
+          onClick={() => setTab('appointments')}>
+          + Nueva cita
+        </button>
+      </div>
+
+      {/* ── View toggle + month nav ── */}
+      <div className="card" style={{ marginBottom: 12, padding: '12px 14px' }}>
+        {/* Toggle month/week */}
+        <div style={{ display: 'flex', borderRadius: 10, overflow: 'hidden', border: '1.5px solid var(--border)', marginBottom: 14 }}>
+          {[['month', '📆 Mes'], ['week', '🗓 Semana']].map(([v, l]) => (
+            <button key={v}
+              onClick={() => { setView(v); if (v === 'week' && !selDay) setSelDay(todStr) }}
+              style={{
+                flex: 1, border: 'none', padding: '8px 0', fontSize: 12, fontWeight: view === v ? 700 : 500,
+                background: view === v ? 'var(--primary)' : 'transparent',
+                color: view === v ? 'white' : 'var(--t2)', cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s',
+              }}>
+              {l}
+            </button>
+          ))}
+        </div>
+
+        {/* Nav row */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <button onClick={goBack} style={{ background: 'var(--primary-l)', border: 'none', borderRadius: 10, width: 36, height: 36, fontSize: 18, cursor: 'pointer', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
+
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontFamily: 'Georgia,serif', fontSize: 17, fontWeight: 700, color: 'var(--t)', textTransform: 'capitalize' }}>
+              {view === 'week'
+                ? (() => {
+                    const ws = new Date(weekDays[0] + 'T12:00:00')
+                    const we = new Date(weekDays[6] + 'T12:00:00')
+                    return `${ws.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })} – ${we.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                  })()
+                : monthLabel
+              }
+            </div>
+            <button onClick={goToday} style={{ background: 'none', border: 'none', fontSize: 10, color: 'var(--primary)', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, marginTop: 1, padding: '2px 6px', borderRadius: 6 }}>
+              Hoy
+            </button>
+          </div>
+
+          <button onClick={goFwd} style={{ background: 'var(--primary-l)', border: 'none', borderRadius: 10, width: 36, height: 36, fontSize: 18, cursor: 'pointer', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
+        </div>
+      </div>
+
+      {/* ── Stats strip ── */}
+      {view === 'month' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 12 }}>
+          {[
+            { label: 'Citas', val: stripMonth.length, color: 'var(--primary)', bg: 'var(--primary-l)' },
+            { label: 'Listas ✓', val: stripDone,  color: 'var(--green)',   bg: 'var(--green-bg)' },
+            { label: 'Pendientes', val: stripPend, color: 'var(--gold)',    bg: 'var(--gold-bg)' },
+            { label: 'No asistió', val: stripNS,   color: 'var(--red)',     bg: 'var(--red-bg)' },
+          ].map(s => (
+            <div key={s.label} style={{ background: s.bg, borderRadius: 12, padding: '10px 6px', textAlign: 'center' }}>
+              <div style={{ fontFamily: 'Georgia,serif', fontSize: 20, fontWeight: 700, color: s.color }}>{s.val}</div>
+              <div style={{ fontSize: 9, color: s.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', marginTop: 2, lineHeight: 1.3 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ═══════════════════════
+          MONTH VIEW
+      ═══════════════════════ */}
+      {view === 'month' && (
+        <div className="card" style={{ marginBottom: 12, padding: '10px 8px' }}>
+          {/* Day-of-week headers */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', marginBottom: 4 }}>
+            {['D', 'L', 'M', 'X', 'J', 'V', 'S'].map(d => (
+              <div key={d} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: 'var(--t2)', textTransform: 'uppercase', letterSpacing: '.06em', paddingBottom: 4 }}>{d}</div>
+            ))}
+          </div>
+
+          {/* Weeks */}
+          {weeks.map((week, wi) => (
+            <div key={wi} style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: '3px 3px', marginBottom: 3 }}>
+              {week.map(dateStr => {
+                const isThisMonth = parseInt(dateStr.slice(5, 7), 10) - 1 === curMonth
+                const isToday     = dateStr === todStr
+                const isSel       = dateStr === selDay
+                const hasAppts    = !!apptsByDate[dateStr]?.length
+                const count       = apptsByDate[dateStr]?.length || 0
+                return (
+                  <div key={dateStr}
+                    onClick={() => setSelDay(isSel ? null : dateStr)}
+                    style={{
+                      borderRadius: 10, padding: '5px 2px 4px', textAlign: 'center', cursor: 'pointer',
+                      minHeight: 46,
+                      background: isSel ? 'var(--primary)' : isToday ? 'var(--primary-l)' : 'transparent',
+                      border: isToday && !isSel ? '1.5px solid var(--primary)' : '1.5px solid transparent',
+                      opacity: isThisMonth ? 1 : 0.35,
+                      transition: 'background .12s, transform .1s',
+                      transform: isSel ? 'scale(0.97)' : 'scale(1)',
+                    }}>
+                    <div style={{
+                      fontSize: 12, fontWeight: isToday || isSel ? 700 : 500,
+                      color: isSel ? 'white' : isToday ? 'var(--primary)' : 'var(--t)',
+                      lineHeight: 1,
+                    }}>
+                      {parseInt(dateStr.slice(8), 10)}
+                    </div>
+                    {hasAppts && (
+                      <div style={{ marginTop: 3 }}>
+                        {count <= 3
+                          ? <DayDots dateStr={dateStr} />
+                          : (
+                            <div style={{
+                              fontSize: 9, fontWeight: 700,
+                              color: isSel ? 'white' : 'var(--primary)',
+                              background: isSel ? 'rgba(255,255,255,0.2)' : 'var(--primary-l)',
+                              borderRadius: 8, padding: '1px 4px', display: 'inline-block', marginTop: 1,
+                            }}>{count}</div>
+                          )
+                        }
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+
+          {/* Legend */}
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+            {[
+              ['var(--green)', 'Completada'],
+              ['var(--primary)', 'Pendiente'],
+              ['var(--t2)', 'Pasada'],
+              ['var(--red)', 'No asistió'],
+            ].map(([color, label]) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--t2)' }}>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                {label}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════
+          WEEK VIEW
+      ═══════════════════════ */}
+      {view === 'week' && (
+        <div className="card" style={{ marginBottom: 12, padding: '10px 8px', overflowX: 'auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4, minWidth: 320 }}>
+            {weekDays.map(dateStr => {
+              const isToday  = dateStr === todStr
+              const isSel    = dateStr === selDay
+              const dayAppts = sortAppts(apptsByDate[dateStr] || [])
+              const d        = new Date(dateStr + 'T12:00:00')
+              return (
+                <div key={dateStr} style={{ minWidth: 0 }}>
+                  {/* Day header */}
+                  <div
+                    onClick={() => setSelDay(isSel ? null : dateStr)}
+                    style={{
+                      textAlign: 'center', borderRadius: 10, padding: '6px 4px', marginBottom: 6, cursor: 'pointer',
+                      background: isSel ? 'var(--primary)' : isToday ? 'var(--primary-l)' : 'var(--bg)',
+                      border: isToday && !isSel ? '1.5px solid var(--primary)' : '1.5px solid transparent',
+                      transition: 'background .12s',
+                    }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: isSel ? 'rgba(255,255,255,0.8)' : 'var(--t2)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                      {d.toLocaleDateString('es-CO', { weekday: 'short' }).replace('.', '')}
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: isSel ? 'white' : isToday ? 'var(--primary)' : 'var(--t)', marginTop: 1 }}>
+                      {d.getDate()}
+                    </div>
+                    {dayAppts.length > 0 && (
+                      <div style={{ fontSize: 9, color: isSel ? 'rgba(255,255,255,0.9)' : 'var(--primary)', fontWeight: 700, marginTop: 2 }}>
+                        {dayAppts.length} cita{dayAppts.length !== 1 ? 's' : ''}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Pills */}
+                  {dayAppts.map(a => <ApptPill key={a.id} a={a} />)}
+
+                  {/* Empty day hint */}
+                  {dayAppts.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '6px 2px', fontSize: 10, color: 'var(--border)' }}>—</div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════
+          SELECTED DAY PANEL
+      ═══════════════════════ */}
+      {selDay && (
+        <div style={{ animation: 'slideDown .18s ease forwards' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <div>
+              <div style={{ fontFamily: 'Georgia,serif', fontSize: 16, fontWeight: 700, color: 'var(--t)', textTransform: 'capitalize' }}>
+                {new Date(selDay + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>
+                {selAppts.length === 0 ? 'Sin citas' : `${selAppts.length} cita${selAppts.length !== 1 ? 's' : ''}`}
+                {selAppts.length > 0 && ` · ${fmtM(selAppts.reduce((s, a) => s + toN(a.totalPrice || a.servicePrice || 0), 0))} total`}
+              </div>
+            </div>
+            <button
+              onClick={() => setTab('appointments')}
+              className="btn" style={{ fontSize: 11, padding: '6px 12px' }}>
+              + Cita
+            </button>
+          </div>
+
+          {selAppts.length === 0 ? (
+            <div className="card" style={{ textAlign: 'center', padding: '28px 20px', color: 'var(--t2)' }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Sin citas este día</div>
+              <div style={{ fontSize: 12 }}>Toca "+ Cita" para agendar una</div>
+            </div>
+          ) : (
+            selAppts.map(a => <ApptCard key={a.id} a={a} />)
+          )}
+        </div>
+      )}
+
+      {/* ── Revenue strip if there's data this month ── */}
+      {view === 'month' && stripRev > 0 && !selDay && (
+        <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px' }}>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--t2)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em' }}>Recibido este mes</div>
+            <div style={{ fontFamily: 'Georgia,serif', fontSize: 22, fontWeight: 700, color: 'var(--green)', marginTop: 2 }}>{fmtM(stripRev)}</div>
+          </div>
+          <button className="btn-sm" onClick={() => setTab('income-detail', { month: `${curYear}-${String(curMonth + 1).padStart(2, '0')}`, origin: 'calendar' })}>
+            Ver detalle →
+          </button>
+        </div>
+      )}
+    </>
+  )
 }
