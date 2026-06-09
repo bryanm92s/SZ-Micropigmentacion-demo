@@ -936,16 +936,29 @@ function EditAppt({appt,services,appts,SA,sync,onClose}) {
   }
 
   const originalIds  = resolveInitialIds()
-  // Always use current catalogue price per service — that is the real individual price.
-  // We only show a warning if the SUM of current prices differs from what was stored
-  // at booking time (meaning prices were edited in the catalogue after the fact).
-  const storedSvcTotal = toN(appt.servicePrice) || Math.max(0, toN(appt.totalPrice) - toN(appt.domicilioPrice))
+  // Use the per-service price snapshot saved at booking time (appt.servicePrices).
+  // For older appointments without that field, fall back to the current catalogue price.
+  // For newly added services (not in originalIds), always use the current catalogue price.
+  const savedPrices  = appt.servicePrices || {}
   const getPriceFor  = id => {
+    if (originalIds.includes(id)) {
+      // Prefer the snapshotted price; fall back to current catalogue price
+      const snap = savedPrices[id]
+      if (snap !== undefined) return toN(snap)
+      const svc = safeSvcs.find(s=>s.id===id)
+      return svc ? toN(svc.price) : 0
+    }
+    // New service added during edit → use current catalogue price
     const svc = safeSvcs.find(s=>s.id===id)
     return svc ? toN(svc.price) : 0
   }
-  const currentSvcSum  = originalIds.reduce((s,id)=>s+getPriceFor(id), 0)
-  const pricesChanged  = originalIds.length > 0 && storedSvcTotal > 0 && currentSvcSum !== storedSvcTotal
+  // Show a warning only if catalogue price changed after booking for an original service
+  const pricesChanged = originalIds.some(id => {
+    const svc = safeSvcs.find(s=>s.id===id)
+    if (!svc) return false
+    const snap = savedPrices[id]
+    return snap !== undefined && toN(snap) !== toN(svc.price)
+  })
 
   const [date,    setDate]  = useState(cleanDate(appt.date)||todayStr())
   const [time,    setTime]  = useState(cleanTime(appt.time)||'')
@@ -966,9 +979,13 @@ function EditAppt({appt,services,appts,SA,sync,onClose}) {
   const save = async () => {
     setL(true)
     const svcNames = selSvcs.map(s=>s.name).join(', ')
+    const updatedServicePrices = Object.fromEntries(
+      selSvcs.map(s => [s.id, getPriceFor(s.id)])
+    )
     const updated  = {
       ...appt, date, time:cleanTime(time)||time,
       serviceIds:selSvcs.map(s=>s.id).join(','), serviceNames:svcNames,
+      servicePrices:updatedServicePrices,
       servicePrice:svcTotal, domicilio:dom, domicilioPrice:dom?toN(domP):0,
       totalPrice:grand, address:dom?addr:''
     }
@@ -1007,8 +1024,8 @@ function EditAppt({appt,services,appts,SA,sync,onClose}) {
           </div>
           <div style={{textAlign:'right',flexShrink:0}}>
             <span style={{fontWeight:700,color:'var(--primary)',fontSize:14}}>{fmtM(getPriceFor(s.id))}</span>
-            {originalIds.includes(s.id) && pricesChanged &&
-              <div style={{fontSize:10,color:'var(--t2)',marginTop:1}}>⚠️ precio editado</div>}
+            {originalIds.includes(s.id) && savedPrices[s.id] !== undefined && toN(savedPrices[s.id]) !== toN(s.price) &&
+              <div style={{fontSize:10,color:'var(--t2)',textDecoration:'line-through',marginTop:1}}>{fmtM(s.price)} actual</div>}
           </div>
         </button>
       ))}
@@ -1039,7 +1056,7 @@ function EditAppt({appt,services,appts,SA,sync,onClose}) {
 
       {/* Total preview */}
       {svcIds.length>0 && <div style={{background:'var(--primary-l)',borderRadius:10,padding:10,fontSize:14,marginBottom:14}}>
-        {svcIds.map(id=>{ const s=safeSvcs.find(x=>x.id===id); if(!s)return null; const p=getPriceFor(id); return <div key={id} style={{display:'flex',justifyContent:'space-between',marginBottom:2}}><span style={{color:'var(--t2)'}}>{s.name}</span><span style={{fontWeight:600}}>{fmtM(p)}</span></div> })}
+        {svcIds.map(id=>{ const s=safeSvcs.find(x=>x.id===id); if(!s)return null; const p=getPriceFor(id); const isOrig=originalIds.includes(id)&&savedPrices[id]!==undefined&&toN(savedPrices[id])!==toN(s.price); return <div key={id} style={{display:'flex',justifyContent:'space-between',marginBottom:2}}><span style={{color:'var(--t2)'}}>{s.name}{isOrig?<span style={{fontSize:10,color:'var(--t2)',marginLeft:4}}>(precio guardado)</span>:''}</span><span style={{fontWeight:600}}>{fmtM(p)}</span></div> })}
         {dom&&<div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}><span style={{color:'var(--t2)'}}>Domicilio</span><span style={{fontWeight:600}}>{fmtM(domP)}</span></div>}
         <div style={{display:'flex',justifyContent:'space-between',borderTop:'1px solid var(--border)',paddingTop:5,marginTop:4}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:700,color:'var(--primary)',fontSize:16}}>{fmtM(grand)}</span></div>
       </div>}
@@ -1148,6 +1165,7 @@ function NewWizard({clients,services,appts,SA,SC,sync,infoModal,onClose}) {
     const appt = {
       id:uid(), clientId:fc.id||'', clientName:fc.name, clientPhone:fc.phone,
       serviceIds:selSvcs.map(s=>s.id).join(','), serviceNames:svcNames,
+      servicePrices:Object.fromEntries(selSvcs.map(s=>[s.id, toN(s.price)])),
       servicePrice:svcTotal, domicilio:dom, domicilioPrice:dom?toN(domP):0,
       totalPrice:grand, address:dom?addr:'',
       date, time:cleanTime(time)||time,
