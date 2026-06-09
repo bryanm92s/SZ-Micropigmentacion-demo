@@ -936,25 +936,57 @@ function EditAppt({appt,services,appts,SA,sync,onClose}) {
   }
 
   const originalIds  = resolveInitialIds()
-  // Use the per-service price snapshot saved at booking time (appt.servicePrices).
-  // For older appointments without that field, fall back to the current catalogue price.
-  // For newly added services (not in originalIds), always use the current catalogue price.
-  const savedPrices  = appt.servicePrices || {}
-  const getPriceFor  = id => {
+
+  // ── Price snapshot logic ──────────────────────────────────────────────────
+  // savedPrices: snapshot stored at booking time { serviceId: price }
+  // For citas without snapshot (created before this feature), we build one on
+  // the fly by distributing the stored servicePrice proportionally to current
+  // catalogue prices (best approximation without historical data).
+  const rawSaved = appt.servicePrices || {}
+  const savedPrices = (() => {
+    // If all original services have a saved price, use as-is
+    if (originalIds.length > 0 && originalIds.every(id => rawSaved[id] !== undefined))
+      return rawSaved
+    // No snapshot at all → reconstruct from stored servicePrice
+    const stored = toN(appt.servicePrice) || Math.max(0, toN(appt.totalPrice) - toN(appt.domicilioPrice))
+    if (!stored || originalIds.length === 0) return rawSaved
+    // If only one service, the stored price IS its price
+    if (originalIds.length === 1) {
+      return { ...rawSaved, [originalIds[0]]: stored }
+    }
+    // Multiple services: distribute proportionally to current catalogue prices
+    const catalogSum = originalIds.reduce((s, id) => {
+      const svc = safeSvcs.find(x => x.id === id)
+      return s + (svc ? toN(svc.price) : 0)
+    }, 0)
+    if (catalogSum === 0) {
+      // Uniform split as last resort
+      const each = Math.round(stored / originalIds.length)
+      return Object.fromEntries(originalIds.map(id => [id, each]))
+    }
+    return Object.fromEntries(originalIds.map(id => {
+      const svc = safeSvcs.find(x => x.id === id)
+      const ratio = svc ? toN(svc.price) / catalogSum : 1 / originalIds.length
+      return [id, Math.round(stored * ratio)]
+    }))
+  })()
+
+  const getPriceFor = id => {
     if (originalIds.includes(id)) {
-      // Prefer the snapshotted price; fall back to current catalogue price
       const snap = savedPrices[id]
       if (snap !== undefined) return toN(snap)
-      const svc = safeSvcs.find(s=>s.id===id)
+      // Still no snapshot (service not in catalogue) → fall back to current
+      const svc = safeSvcs.find(s => s.id === id)
       return svc ? toN(svc.price) : 0
     }
-    // New service added during edit → use current catalogue price
-    const svc = safeSvcs.find(s=>s.id===id)
+    // Newly added service during edit → always current catalogue price
+    const svc = safeSvcs.find(s => s.id === id)
     return svc ? toN(svc.price) : 0
   }
-  // Show a warning only if catalogue price changed after booking for an original service
+
+  // Show strikethrough if catalogue price changed after booking
   const pricesChanged = originalIds.some(id => {
-    const svc = safeSvcs.find(s=>s.id===id)
+    const svc = safeSvcs.find(s => s.id === id)
     if (!svc) return false
     const snap = savedPrices[id]
     return snap !== undefined && toN(snap) !== toN(svc.price)
