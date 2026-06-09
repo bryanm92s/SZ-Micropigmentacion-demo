@@ -338,8 +338,8 @@ export default function App() {
         {tab==='clients'       && <ClientsTab     {...p}/>}
         {tab==='services'      && <ServicesTab    {...p}/>}
         {tab==='finances'      && <FinancesTab    {...p}/>}
-        {tab==='settings'      && <SettingsTab    {...p}/>}
         {tab === 'calendar' && <CalendarView {...p} />}
+        {tab==='settings'      && <SettingsTab    {...p}/>}
         {tab==='income-detail' && <IncomeDetail   {...p}/>}
         {tab==='expense-detail'  && <ExpenseDetail  {...p}/>}
         {tab==='client-history'  && <ClientHistory   {...p}/>}
