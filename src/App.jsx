@@ -2375,7 +2375,6 @@ function ExpenseDetail({expenses,SE,setTab,tabExtra,confirm}) {
       })
     }
   </>
-  )
 }
 
 /* ══════════════════════════════════════════════════════════════
