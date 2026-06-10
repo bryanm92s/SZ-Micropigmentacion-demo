@@ -940,38 +940,31 @@ function EditAppt({appt,services,appts,SA,sync,priceHistory,onClose}) {
   const originalIds  = resolveInitialIds()
   const safeHistory  = Array.isArray(priceHistory) ? priceHistory : []
 
-  // ── Build savedPrices: the price each service had when the appointment was created ──
-  // Priority 1: servicePrices snapshot saved on the appt object (citas nuevas)
-  // Priority 2: reconstruct from priceHistory using the appt creation date
-  // Priority 3: current catalogue price (last resort for very old data)
-  const apptDate = appt.createdAt || appt.date || ''
-
+  // ── Price at a given date from history ──────────────────────────────────
   const getPriceAtDate = (serviceId, beforeDate) => {
-    // Get all price records for this service up to beforeDate, sorted desc
+    if (!beforeDate) return null
     const records = safeHistory
-      .filter(h => h.serviceId === serviceId && h.changedAt <= beforeDate)
-      .sort((a, b) => b.changedAt.localeCompare(a.changedAt))
-    if (records.length > 0) return toN(records[0].price)
-    return null
+      .filter(h => String(h.serviceId) === String(serviceId) && String(h.changedAt) <= String(beforeDate))
+      .sort((a, b) => String(b.changedAt).localeCompare(String(a.changedAt)))
+    return records.length > 0 ? toN(records[0].price) : null
   }
 
+  // ── Build savedPrices snapshot ───────────────────────────────────────────
+  // 1. servicePrices on the appt (new appts)  → exact, use directly
+  // 2. priceHistory records before appt date  → reconstruct for old appts
+  // 3. current catalogue price                → last resort
+  const apptCreatedAt = appt.createdAt || appt.date || ''
   const savedPrices = (() => {
-    const snap = appt.servicePrices || {}
-    // If all original IDs already have a snapshot, use it directly
-    if (originalIds.length > 0 && originalIds.every(id => snap[id] !== undefined))
-      return snap
-    // Build from priceHistory for IDs missing from snapshot
+    const snap = appt.servicePrices
+      ? Object.fromEntries(Object.entries(appt.servicePrices).map(([k,v])=>[k, toN(v)]))
+      : {}
     const result = { ...snap }
     originalIds.forEach(id => {
-      if (result[id] !== undefined) return // already have it
-      const fromHistory = getPriceAtDate(id, apptDate)
-      if (fromHistory !== null) {
-        result[id] = fromHistory
-      } else {
-        // No history record → use current catalogue price (best available)
-        const svc = safeSvcs.find(s => s.id === id)
-        if (svc) result[id] = toN(svc.price)
-      }
+      if (result[id] !== undefined) return
+      const fromHistory = getPriceAtDate(id, apptCreatedAt)
+      if (fromHistory !== null) { result[id] = fromHistory; return }
+      const svc = safeSvcs.find(s => s.id === id)
+      if (svc) result[id] = toN(svc.price)
     })
     return result
   })()
@@ -979,21 +972,16 @@ function EditAppt({appt,services,appts,SA,sync,priceHistory,onClose}) {
   const getPriceFor = id => {
     if (originalIds.includes(id)) {
       const snap = savedPrices[id]
-      if (snap !== undefined) return toN(snap)
-      const svc = safeSvcs.find(s => s.id === id)
-      return svc ? toN(svc.price) : 0
+      if (snap !== undefined) return snap
     }
-    // Newly added service during edit → always current catalogue price
     const svc = safeSvcs.find(s => s.id === id)
     return svc ? toN(svc.price) : 0
   }
 
-  // Show strikethrough if catalogue price changed after booking
   const pricesChanged = originalIds.some(id => {
     const svc = safeSvcs.find(s => s.id === id)
     if (!svc) return false
-    const snap = savedPrices[id]
-    return snap !== undefined && toN(snap) !== toN(svc.price)
+    return savedPrices[id] !== undefined && savedPrices[id] !== toN(svc.price)
   })
 
   const [date,    setDate]  = useState(cleanDate(appt.date)||todayStr())
