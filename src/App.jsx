@@ -940,7 +940,6 @@ function EditAppt({appt,services,appts,SA,sync,priceHistory,onClose}) {
   const originalIds  = resolveInitialIds()
   const safeHistory  = Array.isArray(priceHistory) ? priceHistory : []
 
-  // ── Price at a given date from history ──────────────────────────────────
   const getPriceAtDate = (serviceId, beforeDate) => {
     if (!beforeDate) return null
     const records = safeHistory
@@ -949,10 +948,6 @@ function EditAppt({appt,services,appts,SA,sync,priceHistory,onClose}) {
     return records.length > 0 ? toN(records[0].price) : null
   }
 
-  // ── Build savedPrices snapshot ───────────────────────────────────────────
-  // 1. servicePrices on the appt (new appts)  → exact, use directly
-  // 2. priceHistory records before appt date  → reconstruct for old appts
-  // 3. current catalogue price                → last resort
   const apptCreatedAt = appt.createdAt || appt.date || ''
   const savedPrices = (() => {
     const snap = appt.servicePrices
