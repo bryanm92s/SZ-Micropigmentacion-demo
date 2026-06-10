@@ -183,10 +183,11 @@ const openWA = (phone, name, time, date, serviceNames, total, isDom) => {
 export default function App() {
   const [tab,   setTabRaw] = useState('dashboard')
   const [tabExtra, setTabExtra] = useState(null) // extra state for sub-navigation
-  const [clients,  setC]   = useState([])
-  const [services, setS]   = useState([])
-  const [appts,    setA]   = useState([])
-  const [expenses, setE]   = useState([])
+  const [clients,      setC]   = useState([])
+  const [services,     setS]   = useState([])
+  const [appts,        setA]   = useState([])
+  const [expenses,     setE]   = useState([])
+  const [priceHistory, setPH]  = useState([])
   const [status,   setSt]  = useState('loading')
   const [errMsg,   setEM]  = useState('')
   const [lastSync, setLS]  = useState(null)
@@ -205,6 +206,7 @@ export default function App() {
       setS(Array.isArray(d.services)&&d.services.length?d.services:DEFAULT_SERVICES)
       setA(Array.isArray(d.appointments)?d.appointments:[])
       setE(Array.isArray(d.expenses)?d.expenses:[])
+      setPH(Array.isArray(d.priceHistory)?d.priceHistory:[])
       setSt('ok'); setLS(new Date())
     }).catch(e => {
       setEM(e.message); setSt('error')
@@ -816,7 +818,7 @@ function ApptsTab({clients,services,appts,SA,SC,sync,deleteAppt,confirm,infoModa
   }
 
   if (showNew)  return <NewWizard  clients={clients} services={services} appts={appts} SA={SA} SC={SC} sync={sync} infoModal={infoModal} onClose={()=>setNew(false)}/>
-  if (editAppt) return <EditAppt   appt={editAppt} services={services} appts={appts} SA={SA} sync={sync} onClose={()=>setEdit(null)}/>
+  if (editAppt) return <EditAppt   appt={editAppt} services={services} appts={appts} SA={SA} sync={sync} priceHistory={priceHistory} onClose={()=>setEdit(null)}/>
 
   const AccGroup = ({label,color,gKey,items,canEdit=true}) => {
     if (items.length===0) return null
@@ -919,7 +921,7 @@ function ApptCard({appt,canEdit,onToggle,onEdit,onDelete}) {
 }
 
 /* ── Edit Appointment — date, time AND services ── */
-function EditAppt({appt,services,appts,SA,sync,onClose}) {
+function EditAppt({appt,services,appts,SA,sync,priceHistory,onClose}) {
   const safeSvcs = Array.isArray(services)?services:[]
 
   // Build originalIds + original price map from appt data
@@ -936,46 +938,48 @@ function EditAppt({appt,services,appts,SA,sync,onClose}) {
   }
 
   const originalIds  = resolveInitialIds()
+  const safeHistory  = Array.isArray(priceHistory) ? priceHistory : []
 
-  // ── Price snapshot logic ──────────────────────────────────────────────────
-  // savedPrices: snapshot stored at booking time { serviceId: price }
-  // For citas without snapshot (created before this feature), we build one on
-  // the fly by distributing the stored servicePrice proportionally to current
-  // catalogue prices (best approximation without historical data).
-  const rawSaved = appt.servicePrices || {}
+  // ── Build savedPrices: the price each service had when the appointment was created ──
+  // Priority 1: servicePrices snapshot saved on the appt object (citas nuevas)
+  // Priority 2: reconstruct from priceHistory using the appt creation date
+  // Priority 3: current catalogue price (last resort for very old data)
+  const apptDate = appt.createdAt || appt.date || ''
+
+  const getPriceAtDate = (serviceId, beforeDate) => {
+    // Get all price records for this service up to beforeDate, sorted desc
+    const records = safeHistory
+      .filter(h => h.serviceId === serviceId && h.changedAt <= beforeDate)
+      .sort((a, b) => b.changedAt.localeCompare(a.changedAt))
+    if (records.length > 0) return toN(records[0].price)
+    return null
+  }
+
   const savedPrices = (() => {
-    // If all original services have a saved price, use as-is
-    if (originalIds.length > 0 && originalIds.every(id => rawSaved[id] !== undefined))
-      return rawSaved
-    // No snapshot at all → reconstruct from stored servicePrice
-    const stored = toN(appt.servicePrice) || Math.max(0, toN(appt.totalPrice) - toN(appt.domicilioPrice))
-    if (!stored || originalIds.length === 0) return rawSaved
-    // If only one service, the stored price IS its price
-    if (originalIds.length === 1) {
-      return { ...rawSaved, [originalIds[0]]: stored }
-    }
-    // Multiple services: distribute proportionally to current catalogue prices
-    const catalogSum = originalIds.reduce((s, id) => {
-      const svc = safeSvcs.find(x => x.id === id)
-      return s + (svc ? toN(svc.price) : 0)
-    }, 0)
-    if (catalogSum === 0) {
-      // Uniform split as last resort
-      const each = Math.round(stored / originalIds.length)
-      return Object.fromEntries(originalIds.map(id => [id, each]))
-    }
-    return Object.fromEntries(originalIds.map(id => {
-      const svc = safeSvcs.find(x => x.id === id)
-      const ratio = svc ? toN(svc.price) / catalogSum : 1 / originalIds.length
-      return [id, Math.round(stored * ratio)]
-    }))
+    const snap = appt.servicePrices || {}
+    // If all original IDs already have a snapshot, use it directly
+    if (originalIds.length > 0 && originalIds.every(id => snap[id] !== undefined))
+      return snap
+    // Build from priceHistory for IDs missing from snapshot
+    const result = { ...snap }
+    originalIds.forEach(id => {
+      if (result[id] !== undefined) return // already have it
+      const fromHistory = getPriceAtDate(id, apptDate)
+      if (fromHistory !== null) {
+        result[id] = fromHistory
+      } else {
+        // No history record → use current catalogue price (best available)
+        const svc = safeSvcs.find(s => s.id === id)
+        if (svc) result[id] = toN(svc.price)
+      }
+    })
+    return result
   })()
 
   const getPriceFor = id => {
     if (originalIds.includes(id)) {
       const snap = savedPrices[id]
       if (snap !== undefined) return toN(snap)
-      // Still no snapshot (service not in catalogue) → fall back to current
       const svc = safeSvcs.find(s => s.id === id)
       return svc ? toN(svc.price) : 0
     }

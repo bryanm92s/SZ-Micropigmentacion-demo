@@ -2,9 +2,9 @@
 // ║  Salome Zuluaga | Micropigmentación — DEMO Apps Script  ║
 // ╚══════════════════════════════════════════════════════════════╝
 
-const SECRET_TOKEN = 'CAMBIA_ESTE_TOKEN';
+const SECRET_TOKEN = 'MiStudioDemo2024$ecret';
 
-const SHEETS = { clients:'Clientes', services:'Servicios', appointments:'Citas', expenses:'Gastos' };
+const SHEETS = { clients:'Clientes', services:'Servicios', appointments:'Citas', expenses:'Gastos', priceHistory:'HistorialPrecios' };
 
 const JS_KEYS = {
   clients:      ['id','name','phone','createdAt'],
@@ -14,6 +14,7 @@ const JS_KEYS = {
                  'domicilio','domicilioPrice','totalPrice','address',
                  'date','time','createdAt','calendarCreated','calendarEventId','completed'],
   expenses:     ['id','description','amount','category','date'],
+  priceHistory: ['serviceId','serviceName','price','changedAt'],
 };
 
 const HEADERS_ES = {
@@ -24,6 +25,7 @@ const HEADERS_ES = {
                  'Domicilio','Precio Domicilio','Total','Dirección',
                  'Fecha','Hora','Fecha Creación','Evento Creado','ID Evento Calendar','Completada'],
   expenses:     ['ID','Descripción','Monto','Categoría','Fecha'],
+  priceHistory: ['ID Servicio','Nombre Servicio','Precio','Fecha Cambio'],
 };
 
 function doGet(e) {
@@ -36,6 +38,7 @@ function doGet(e) {
       services:     readSheet(ss,'services'),
       appointments: readSheet(ss,'appointments'),
       expenses:     readSheet(ss,'expenses'),
+      priceHistory: readSheet(ss,'priceHistory'),
     });
   } catch(ex) { return err('GET: '+ex.message); }
 }
@@ -52,7 +55,10 @@ function doPost(e) {
     if (b.action==='deleteCalendarEvent') return ok({calResult:deleteCalEvent(b.eventId)});
     if (b.action==='updateCalendarEvent') return ok({calResult:updateCalEvent(b.eventId,b.calendarEvent)});
     if (b.clients      !== undefined) writeSheet(ss,'clients',b.clients);
-    if (b.services     !== undefined) writeSheet(ss,'services',b.services);
+    if (b.services     !== undefined) {
+      trackPriceChanges(ss, b.services);
+      writeSheet(ss,'services',b.services);
+    }
     if (b.appointments !== undefined) writeSheet(ss,'appointments',b.appointments);
     if (b.expenses     !== undefined) writeSheet(ss,'expenses',b.expenses);
     let calResult=null;
@@ -323,6 +329,50 @@ function removeWeeklyEmailTrigger() {
     }
   });
   console.log(removed > 0 ? '✅ Trigger de email eliminado' : 'No se encontró el trigger');
+}
+
+function trackPriceChanges(ss, newServices) {
+  try {
+    // Read current prices from the sheet before overwriting
+    const current = readSheet(ss, 'services');
+    const currentMap = {};
+    current.forEach(s => { currentMap[s.id] = s; });
+
+    const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss");
+    const changes = [];
+
+    newServices.forEach(s => {
+      const prev = currentMap[s.id];
+      if (!prev) {
+        // New service — record its initial price
+        changes.push({ serviceId: s.id, serviceName: s.name, price: String(s.price), changedAt: now });
+      } else if (String(prev.price) !== String(s.price)) {
+        // Price changed — record the NEW price with timestamp
+        changes.push({ serviceId: s.id, serviceName: s.name, price: String(s.price), changedAt: now });
+      }
+    });
+
+    if (changes.length === 0) return;
+
+    // Append to HistorialPrecios sheet
+    initSheets(ss); // ensure sheet exists
+    const sh = ss.getSheetByName(SHEETS.priceHistory);
+    const keys = JS_KEYS.priceHistory;
+    const headers = HEADERS_ES.priceHistory;
+
+    // Write header if sheet is empty
+    if (sh.getLastRow() === 0) {
+      sh.getRange(1, 1, 1, headers.length).setNumberFormat('@').setValues([headers]);
+    }
+
+    const rows = changes.map(c => keys.map(k => c[k] || ''));
+    sh.getRange(sh.getLastRow() + 1, 1, rows.length, keys.length)
+      .setNumberFormat('@')
+      .setValues(rows);
+
+  } catch(ex) {
+    console.error('trackPriceChanges error: ' + ex.message);
+  }
 }
 
 function initSheets(ss) {
