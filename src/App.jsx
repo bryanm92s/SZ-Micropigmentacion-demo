@@ -937,21 +937,29 @@ function EditAppt({appt,services,appts,SA,sync,priceHistory,onClose}) {
     return safeSvcs.filter(s=>names.includes(s.name)).map(s=>s.id)
   }
 
-  // ── hooks primero (regla de React) ─────────────────────────────────────────
-  const initialIds = resolveInitialIds()
+  // ── Hooks primero — regla de React ─────────────────────────────────────────
+  const _initialIds = resolveInitialIds()
   const [date,    setDate]  = useState(cleanDate(appt.date)||todayStr())
   const [time,    setTime]  = useState(cleanTime(appt.time)||'')
-  const [svcIds,  setSvcIds]= useState(initialIds)
+  const [svcIds,  setSvcIds]= useState(_initialIds)
   const [dom,     setDom]   = useState(bool(appt.domicilio))
   const [domP,    setDomP]  = useState(toN(appt.domicilioPrice)||10000)
   const [addr,    setAddr]  = useState(appt.address||'')
   const [loading, setL]     = useState(false)
   const [result,  setR]     = useState(null)
 
-  // ── precio snapshot (después de hooks) ─────────────────────────────────
-  const originalIds   = initialIds
+  // ── Lógica de precios (después de hooks) ────────────────────────────────
+  const originalIds   = _initialIds
   const safeHistory   = Array.isArray(priceHistory) ? priceHistory : []
   const apptCreatedAt = appt.createdAt || appt.date || ''
+
+  const getPriceAtDate = (serviceId, beforeDate) => {
+    if (!beforeDate) return null
+    const records = safeHistory
+      .filter(h => String(h.serviceId) === String(serviceId) && String(h.changedAt) <= String(beforeDate))
+      .sort((a, b) => String(b.changedAt).localeCompare(String(a.changedAt)))
+    return records.length > 0 ? toN(records[0].price) : null
+  }
 
   const savedPrices = (() => {
     let snap = {}
@@ -959,17 +967,15 @@ function EditAppt({appt,services,appts,SA,sync,priceHistory,onClose}) {
       const raw = appt.servicePrices
       if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
         snap = Object.fromEntries(Object.entries(raw).map(([k,v]) => [k, toN(v)]))
-      } else if (typeof raw === 'string' && raw.trim()[0] === String.fromCharCode(123)) {
+      } else if (typeof raw === 'string' && raw.trim().startsWith('{')) {
         snap = Object.fromEntries(Object.entries(JSON.parse(raw)).map(([k,v]) => [k, toN(v)]))
       }
-    } catch(_) { snap = {} }
+    } catch(_e) { snap = {} }
     const result = { ...snap }
     originalIds.forEach(id => {
       if (result[id] !== undefined) return
-      const records = safeHistory
-        .filter(h => String(h.serviceId) === String(id) && apptCreatedAt && String(h.changedAt) <= String(apptCreatedAt))
-        .sort((a, b) => String(b.changedAt).localeCompare(String(a.changedAt)))
-      if (records.length > 0) { result[id] = toN(records[0].price); return }
+      const fromHistory = getPriceAtDate(id, apptCreatedAt)
+      if (fromHistory !== null) { result[id] = fromHistory; return }
       const svc = safeSvcs.find(s => s.id === id)
       if (svc) result[id] = toN(svc.price)
     })
