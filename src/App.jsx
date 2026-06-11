@@ -937,27 +937,39 @@ function EditAppt({appt,services,appts,SA,sync,priceHistory,onClose}) {
     return safeSvcs.filter(s=>names.includes(s.name)).map(s=>s.id)
   }
 
-  const originalIds  = resolveInitialIds()
-  const safeHistory  = Array.isArray(priceHistory) ? priceHistory : []
+  // ── hooks primero (regla de React) ─────────────────────────────────────────
+  const initialIds = resolveInitialIds()
+  const [date,    setDate]  = useState(cleanDate(appt.date)||todayStr())
+  const [time,    setTime]  = useState(cleanTime(appt.time)||'')
+  const [svcIds,  setSvcIds]= useState(initialIds)
+  const [dom,     setDom]   = useState(bool(appt.domicilio))
+  const [domP,    setDomP]  = useState(toN(appt.domicilioPrice)||10000)
+  const [addr,    setAddr]  = useState(appt.address||'')
+  const [loading, setL]     = useState(false)
+  const [result,  setR]     = useState(null)
 
-  const getPriceAtDate = (serviceId, beforeDate) => {
-    if (!beforeDate) return null
-    const records = safeHistory
-      .filter(h => String(h.serviceId) === String(serviceId) && String(h.changedAt) <= String(beforeDate))
-      .sort((a, b) => String(b.changedAt).localeCompare(String(a.changedAt)))
-    return records.length > 0 ? toN(records[0].price) : null
-  }
-
+  // ── precio snapshot (después de hooks) ─────────────────────────────────
+  const originalIds   = initialIds
+  const safeHistory   = Array.isArray(priceHistory) ? priceHistory : []
   const apptCreatedAt = appt.createdAt || appt.date || ''
+
   const savedPrices = (() => {
-    const snap = appt.servicePrices
-      ? Object.fromEntries(Object.entries(appt.servicePrices).map(([k,v])=>[k, toN(v)]))
-      : {}
+    let snap = {}
+    try {
+      const raw = appt.servicePrices
+      if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+        snap = Object.fromEntries(Object.entries(raw).map(([k,v]) => [k, toN(v)]))
+      } else if (typeof raw === 'string' && raw.trim()[0] === String.fromCharCode(123)) {
+        snap = Object.fromEntries(Object.entries(JSON.parse(raw)).map(([k,v]) => [k, toN(v)]))
+      }
+    } catch(_) { snap = {} }
     const result = { ...snap }
     originalIds.forEach(id => {
       if (result[id] !== undefined) return
-      const fromHistory = getPriceAtDate(id, apptCreatedAt)
-      if (fromHistory !== null) { result[id] = fromHistory; return }
+      const records = safeHistory
+        .filter(h => String(h.serviceId) === String(id) && apptCreatedAt && String(h.changedAt) <= String(apptCreatedAt))
+        .sort((a, b) => String(b.changedAt).localeCompare(String(a.changedAt)))
+      if (records.length > 0) { result[id] = toN(records[0].price); return }
       const svc = safeSvcs.find(s => s.id === id)
       if (svc) result[id] = toN(svc.price)
     })
@@ -965,28 +977,15 @@ function EditAppt({appt,services,appts,SA,sync,priceHistory,onClose}) {
   })()
 
   const getPriceFor = id => {
-    if (originalIds.includes(id)) {
-      const snap = savedPrices[id]
-      if (snap !== undefined) return snap
-    }
+    if (originalIds.includes(id) && savedPrices[id] !== undefined) return savedPrices[id]
     const svc = safeSvcs.find(s => s.id === id)
     return svc ? toN(svc.price) : 0
   }
-
   const pricesChanged = originalIds.some(id => {
     const svc = safeSvcs.find(s => s.id === id)
     if (!svc) return false
     return savedPrices[id] !== undefined && savedPrices[id] !== toN(svc.price)
   })
-
-  const [date,    setDate]  = useState(cleanDate(appt.date)||todayStr())
-  const [time,    setTime]  = useState(cleanTime(appt.time)||'')
-  const [svcIds,  setSvcIds]= useState(originalIds)
-  const [dom,     setDom]   = useState(bool(appt.domicilio))
-  const [domP,    setDomP]  = useState(toN(appt.domicilioPrice)||10000)
-  const [addr,    setAddr]  = useState(appt.address||'')
-  const [loading, setL]     = useState(false)
-  const [result,  setR]     = useState(null)
 
   const slots    = getSlots(date, [], appts, appt.id)
   const toggleSvc= id => setSvcIds(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id])
