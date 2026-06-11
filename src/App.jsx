@@ -288,7 +288,7 @@ export default function App() {
       saveData({action:'deleteCalendarEvent',eventId:appt.calendarEventId}).catch(()=>{})
   }, [appts, SA])
 
-  const p = {clients,services,appts,expenses,SC,SS,SA,SE,sync,deleteAppt,setTab,confirm,infoModal,tabExtra,resetAll,themeMode,themePalette,setThemeMode,setThemePalette,priceHistory}
+  const p = {clients,services,appts,expenses,SC,SS,SA,SE,sync,deleteAppt,setTab,confirm,infoModal,tabExtra,resetAll,themeMode,themePalette,setThemeMode,setThemePalette}
 
   if (status==='loading') return <Cent><div style={{fontSize:52,animation:'pulse 2s ease-in-out infinite'}}>{BIZ_EMOJI}</div></Cent>
   if (status==='noconfig') return <Cent><div style={{fontSize:36,marginBottom:8}}>⚙️</div><p style={{fontSize:16,fontWeight:600}}>Configura VITE_SCRIPT_URL y VITE_TOKEN en Vercel</p></Cent>
@@ -788,7 +788,7 @@ function MonthlyBalance({appts,expenses,selMonth,setSelMonth,setTab}) {
 /* ══════════════════════════════════════════════════════════════
    APPOINTMENTS TAB — Fixed accordion (independent toggle)
 ══════════════════════════════════════════════════════════════ */
-function ApptsTab({clients,services,appts,SA,SC,sync,deleteAppt,confirm,infoModal,priceHistory}) {
+function ApptsTab({clients,services,appts,SA,SC,sync,deleteAppt,confirm,infoModal}) {
   const [showNew,  setNew]  = useState(false)
   const [editAppt, setEdit] = useState(null)
   // Only "today" open by default — each group toggles independently
@@ -1004,8 +1004,8 @@ function EditAppt({appt,services,appts,SA,sync,priceHistory,onClose}) {
   const save = async () => {
     setL(true)
     const svcNames = selSvcs.map(s=>s.name).join(', ')
-    const updatedServicePrices = Object.fromEntries(
-      selSvcs.map(s => [s.id, getPriceFor(s.id)])
+    const updatedServicePrices = JSON.stringify(
+      Object.fromEntries(selSvcs.map(s => [s.id, getPriceFor(s.id)]))
     )
     const updated  = {
       ...appt, date, time:cleanTime(time)||time,
@@ -1193,7 +1193,7 @@ function NewWizard({clients,services,appts,SA,SC,sync,infoModal,onClose}) {
     const appt = {
       id:uid(), clientId:fc.id||'', clientName:fc.name, clientPhone:fc.phone,
       serviceIds:selSvcs.map(s=>s.id).join(','), serviceNames:svcNames,
-      servicePrices:Object.fromEntries(selSvcs.map(s=>[s.id, toN(s.price)])),
+      servicePrices:JSON.stringify(Object.fromEntries(selSvcs.map(s=>[s.id, toN(s.price)]))),
       servicePrice:svcTotal, domicilio:dom, domicilioPrice:dom?toN(domP):0,
       totalPrice:grand, address:dom?addr:'',
       date, time:cleanTime(time)||time,
