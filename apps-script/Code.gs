@@ -2,7 +2,7 @@
 // ║  Salome Zuluaga | Micropigmentación — DEMO Apps Script  ║
 // ╚══════════════════════════════════════════════════════════════╝
 
-const SECRET_TOKEN = 'MiStudioDemo2024$ecret';
+const SECRET_TOKEN = 'CAMBIA_TU_TOKEN';
 
 const SHEETS = { clients:'Clientes', services:'Servicios', appointments:'Citas', expenses:'Gastos', priceHistory:'HistorialPrecios' };
 
