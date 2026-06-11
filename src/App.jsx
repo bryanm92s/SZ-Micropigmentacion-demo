@@ -272,8 +272,9 @@ export default function App() {
     calAppts.forEach(a => {
       saveData({action:'deleteCalendarEvent',eventId:a.calendarEventId}).catch(()=>{})
     })
-    const empty = { clients:[], appointments:[], expenses:[], services:DEFAULT_SERVICES }
-    setC([]); setA([]); setE([]); setS(DEFAULT_SERVICES)
+    // resetPriceHistory:true tells the backend to wipe history and seed with new service prices
+    const empty = { clients:[], appointments:[], expenses:[], services:DEFAULT_SERVICES, resetPriceHistory:true }
+    setC([]); setA([]); setE([]); setS(DEFAULT_SERVICES); setPH([]); setPH([])
     try { ['sb_c','sb_a','sb_e','sb_s'].forEach(k=>localStorage.removeItem(k)) } catch {}
     setSt('saving')
     try { await saveData(empty); setSt('ok'); setLS(new Date()) }
@@ -287,7 +288,7 @@ export default function App() {
       saveData({action:'deleteCalendarEvent',eventId:appt.calendarEventId}).catch(()=>{})
   }, [appts, SA])
 
-  const p = {clients,services,appts,expenses,SC,SS,SA,SE,sync,deleteAppt,setTab,confirm,infoModal,tabExtra,resetAll,themeMode,themePalette,setThemeMode,setThemePalette,priceHistory}
+  const p = {clients,services,appts,expenses,SC,SS,SA,SE,sync,deleteAppt,setTab,confirm,infoModal,tabExtra,resetAll,themeMode,themePalette,setThemeMode,setThemePalette}
 
   if (status==='loading') return <Cent><div style={{fontSize:52,animation:'pulse 2s ease-in-out infinite'}}>{BIZ_EMOJI}</div></Cent>
   if (status==='noconfig') return <Cent><div style={{fontSize:36,marginBottom:8}}>⚙️</div><p style={{fontSize:16,fontWeight:600}}>Configura VITE_SCRIPT_URL y VITE_TOKEN en Vercel</p></Cent>
@@ -787,7 +788,7 @@ function MonthlyBalance({appts,expenses,selMonth,setSelMonth,setTab}) {
 /* ══════════════════════════════════════════════════════════════
    APPOINTMENTS TAB — Fixed accordion (independent toggle)
 ══════════════════════════════════════════════════════════════ */
-function ApptsTab({clients,services,appts,SA,SC,sync,deleteAppt,confirm,infoModal,priceHistory}) {
+function ApptsTab({clients,services,appts,SA,SC,sync,deleteAppt,confirm,infoModal}) {
   const [showNew,  setNew]  = useState(false)
   const [editAppt, setEdit] = useState(null)
   // Only "today" open by default — each group toggles independently

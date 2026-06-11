@@ -55,8 +55,23 @@ function doPost(e) {
     if (b.action==='deleteCalendarEvent') return ok({calResult:deleteCalEvent(b.eventId)});
     if (b.action==='updateCalendarEvent') return ok({calResult:updateCalEvent(b.eventId,b.calendarEvent)});
     if (b.clients      !== undefined) writeSheet(ss,'clients',b.clients);
-    if (b.services     !== undefined) {
-      trackPriceChanges(ss, b.services);
+    if (b.services !== undefined) {
+      if (b.resetPriceHistory) {
+        // Full reset: wipe history and seed with the new service prices
+        const sh = ss.getSheetByName(SHEETS.priceHistory);
+        if (sh) sh.clearContents();
+        const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss");
+        const phSh = ss.getSheetByName(SHEETS.priceHistory);
+        const headers = HEADERS_ES.priceHistory;
+        phSh.getRange(1, 1, 1, headers.length).setNumberFormat('@').setValues([headers]);
+        if (b.services.length > 0) {
+          const initRows = b.services.map(s => [s.id, s.name, String(s.price), now]);
+          phSh.getRange(2, 1, initRows.length, 4).setNumberFormat('@').setValues(initRows);
+        }
+      } else {
+        // Normal save: detect and record price changes
+        trackPriceChanges(ss, b.services);
+      }
       writeSheet(ss,'services',b.services);
     }
     if (b.appointments !== undefined) writeSheet(ss,'appointments',b.appointments);
@@ -338,27 +353,16 @@ function trackPriceChanges(ss, newServices) {
     const currentMap = {};
     current.forEach(s => { currentMap[s.id] = s; });
 
-    // Also read existing history to check if we already have an initial entry
-    const existingHistory = readSheet(ss, 'priceHistory');
-    const historyIds = new Set(existingHistory.map(h => h.serviceId));
-
     const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss");
-    // "before" timestamp: 1 second before now, so old price sorts before new price
-    const before = Utilities.formatDate(new Date(new Date().getTime() - 1000), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss");
     const changes = [];
 
     newServices.forEach(s => {
       const prev = currentMap[s.id];
       if (!prev) {
-        // Brand new service — record its initial price
+        // New service — record its initial price
         changes.push({ serviceId: s.id, serviceName: s.name, price: String(s.price), changedAt: now });
       } else if (String(prev.price) !== String(s.price)) {
-        // Price changed:
-        // 1. If this service has NO history yet, first record the OLD price (so we know what it was before)
-        if (!historyIds.has(s.id)) {
-          changes.push({ serviceId: s.id, serviceName: s.name, price: String(prev.price), changedAt: before });
-        }
-        // 2. Always record the NEW price with current timestamp
+        // Price changed — record the NEW price with timestamp
         changes.push({ serviceId: s.id, serviceName: s.name, price: String(s.price), changedAt: now });
       }
     });
