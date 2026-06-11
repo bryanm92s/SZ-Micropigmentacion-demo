@@ -56,7 +56,11 @@ function doPost(e) {
     if (b.action==='updateCalendarEvent') return ok({calResult:updateCalEvent(b.eventId,b.calendarEvent)});
     if (b.clients      !== undefined) writeSheet(ss,'clients',b.clients);
     if (b.services     !== undefined) {
-      trackPriceChanges(ss, b.services);
+      // Skip price tracking on full reset (all IDs are new — no overlap with existing)
+      const existing = readSheet(ss, 'services');
+      const existingIds = new Set(existing.map(s => s.id));
+      const isReset = b.services.length > 0 && !b.services.some(s => existingIds.has(s.id));
+      if (!isReset) trackPriceChanges(ss, b.services);
       writeSheet(ss,'services',b.services);
     }
     if (b.appointments !== undefined) writeSheet(ss,'appointments',b.appointments);
