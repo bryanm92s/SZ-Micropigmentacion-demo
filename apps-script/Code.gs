@@ -56,11 +56,7 @@ function doPost(e) {
     if (b.action==='updateCalendarEvent') return ok({calResult:updateCalEvent(b.eventId,b.calendarEvent)});
     if (b.clients      !== undefined) writeSheet(ss,'clients',b.clients);
     if (b.services     !== undefined) {
-      // Skip price tracking on full reset (all IDs are new — no overlap with existing)
-      const existing = readSheet(ss, 'services');
-      const existingIds = new Set(existing.map(s => s.id));
-      const isReset = b.services.length > 0 && !b.services.some(s => existingIds.has(s.id));
-      if (!isReset) trackPriceChanges(ss, b.services);
+      trackPriceChanges(ss, b.services);
       writeSheet(ss,'services',b.services);
     }
     if (b.appointments !== undefined) writeSheet(ss,'appointments',b.appointments);
@@ -342,16 +338,27 @@ function trackPriceChanges(ss, newServices) {
     const currentMap = {};
     current.forEach(s => { currentMap[s.id] = s; });
 
+    // Also read existing history to check if we already have an initial entry
+    const existingHistory = readSheet(ss, 'priceHistory');
+    const historyIds = new Set(existingHistory.map(h => h.serviceId));
+
     const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss");
+    // "before" timestamp: 1 second before now, so old price sorts before new price
+    const before = Utilities.formatDate(new Date(new Date().getTime() - 1000), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm:ss");
     const changes = [];
 
     newServices.forEach(s => {
       const prev = currentMap[s.id];
       if (!prev) {
-        // New service — record its initial price
+        // Brand new service — record its initial price
         changes.push({ serviceId: s.id, serviceName: s.name, price: String(s.price), changedAt: now });
       } else if (String(prev.price) !== String(s.price)) {
-        // Price changed — record the NEW price with timestamp
+        // Price changed:
+        // 1. If this service has NO history yet, first record the OLD price (so we know what it was before)
+        if (!historyIds.has(s.id)) {
+          changes.push({ serviceId: s.id, serviceName: s.name, price: String(prev.price), changedAt: before });
+        }
+        // 2. Always record the NEW price with current timestamp
         changes.push({ serviceId: s.id, serviceName: s.name, price: String(s.price), changedAt: now });
       }
     });
